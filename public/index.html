@@ -52,6 +52,7 @@
           <h1 id="finance-title">Finance</h1>
           <div class="plaid-actions">
             <span data-plaid-status></span>
+            <button class="add-button" type="button" data-open-accounting>Accounting</button>
             <button class="add-button" type="button" data-link-bank>Link Bank</button>
             <button class="add-button" type="button" data-open-plaid-review hidden>Review Plaid</button>
           </div>
@@ -102,6 +103,88 @@
             <div class="ledger-list" data-ledger-list="income" aria-label="Income log"></div>
           </section>
         </div>
+      </section>
+      <section class="accounting-page page-view" data-page="accounting" aria-labelledby="accounting-title" hidden>
+        <div class="finance-head">
+          <div>
+            <h1 id="accounting-title">Accounting</h1>
+            <div class="accounting-equation" data-accounting-equation></div>
+          </div>
+          <div class="accounting-date" data-accounting-date></div>
+        </div>
+        <section class="accounting-summary" aria-label="Accounting equation">
+          <div class="summary-metric">
+            <span>Assets</span>
+            <strong data-accounting-assets>0.00</strong>
+          </div>
+          <div class="summary-metric">
+            <span>Liabilities</span>
+            <strong data-accounting-liabilities>0.00</strong>
+          </div>
+          <div class="summary-metric">
+            <span>Equity</span>
+            <strong data-accounting-equity>0.00</strong>
+          </div>
+          <div class="summary-metric">
+            <span>Check</span>
+            <strong data-accounting-check>Balanced</strong>
+          </div>
+        </section>
+        <section class="accounting-analytics" aria-label="Accounting analytics">
+          <div class="accounting-list" data-accounting-list="ratios"></div>
+        </section>
+        <div class="accounting-columns">
+          <section class="ledger" aria-labelledby="assets-title">
+            <div class="ledger-head">
+              <h2 id="assets-title">Assets</h2>
+            </div>
+            <div class="accounting-list" data-accounting-list="assets"></div>
+          </section>
+          <section class="ledger" aria-labelledby="liabilities-title">
+            <div class="ledger-head">
+              <h2 id="liabilities-title">Liabilities</h2>
+            </div>
+            <div class="accounting-list" data-accounting-list="liabilities"></div>
+          </section>
+          <section class="ledger" aria-labelledby="equity-title">
+            <div class="ledger-head">
+              <h2 id="equity-title">Equity</h2>
+            </div>
+            <div class="accounting-list" data-accounting-list="equity"></div>
+          </section>
+        </div>
+        <section class="ledger accounting-ledger" aria-labelledby="trial-balance-title">
+          <div class="ledger-head">
+            <h2 id="trial-balance-title">Adjusted Trial Balance</h2>
+          </div>
+          <div class="trial-balance-list" data-trial-balance-list></div>
+        </section>
+        <div class="accounting-columns accounting-statement-grid">
+          <section class="ledger" aria-labelledby="income-statement-title">
+            <div class="ledger-head">
+              <h2 id="income-statement-title">Income Statement</h2>
+            </div>
+            <div class="accounting-list" data-accounting-list="incomeStatement"></div>
+          </section>
+          <section class="ledger" aria-labelledby="cash-flow-title">
+            <div class="ledger-head">
+              <h2 id="cash-flow-title">Cash Flow</h2>
+            </div>
+            <div class="accounting-list" data-accounting-list="cashFlow"></div>
+          </section>
+          <section class="ledger" aria-labelledby="adjustments-title">
+            <div class="ledger-head">
+              <h2 id="adjustments-title">Adjustments</h2>
+            </div>
+            <div class="accounting-list" data-accounting-list="adjustments"></div>
+          </section>
+        </div>
+        <section class="ledger journal-ledger" aria-labelledby="journal-title">
+          <div class="ledger-head">
+            <h2 id="journal-title">Journal Entries</h2>
+          </div>
+          <div class="journal-list" data-journal-list></div>
+        </section>
       </section>
       <section class="budget-page page-view" data-page="budget" aria-labelledby="budget-title" hidden>
         <div class="budget-head">

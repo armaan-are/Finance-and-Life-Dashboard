@@ -68,6 +68,26 @@ const loanDialog = document.querySelector("[data-loan-dialog]");
 const loanForm = document.querySelector("[data-loan-form]");
 const totalDebt = document.querySelector("[data-total-debt]");
 const graduationDateLabel = document.querySelector("[data-graduation-date-label]");
+const openAccountingButton = document.querySelector("[data-open-accounting]");
+const accountingElements = {
+  equation: document.querySelector("[data-accounting-equation]"),
+  date: document.querySelector("[data-accounting-date]"),
+  assets: document.querySelector("[data-accounting-assets]"),
+  liabilities: document.querySelector("[data-accounting-liabilities]"),
+  equity: document.querySelector("[data-accounting-equity]"),
+  check: document.querySelector("[data-accounting-check]"),
+  lists: {
+    assets: document.querySelector('[data-accounting-list="assets"]'),
+    liabilities: document.querySelector('[data-accounting-list="liabilities"]'),
+    equity: document.querySelector('[data-accounting-list="equity"]'),
+    ratios: document.querySelector('[data-accounting-list="ratios"]'),
+    incomeStatement: document.querySelector('[data-accounting-list="incomeStatement"]'),
+    cashFlow: document.querySelector('[data-accounting-list="cashFlow"]'),
+    adjustments: document.querySelector('[data-accounting-list="adjustments"]')
+  },
+  trialBalance: document.querySelector("[data-trial-balance-list]"),
+  journal: document.querySelector("[data-journal-list]")
+};
 const summaryElements = {
   totalSpending: document.querySelector("[data-total-spending]"),
   extractedValue: document.querySelector("[data-extracted-value]"),
@@ -206,6 +226,12 @@ function numberValue(value) {
 
 function formatNumber(value) {
   return value.toFixed(2);
+}
+
+function money(value) {
+  const amount = Number(value) || 0;
+  const sign = amount < 0 ? "-" : "";
+  return `${sign}$${formatNumber(Math.abs(amount))}`;
 }
 
 function normalizeDateText(value, defaultYear = "2026") {
@@ -478,6 +504,329 @@ function renderDebt() {
   graduationDateLabel.textContent = financeData.graduationDate
     ? `Graduation ${displayAppDate(financeData.graduationDate)}`
     : "No graduation date";
+}
+
+function sumRows(rows, predicate = () => true) {
+  return rows.reduce((total, row) => (
+    predicate(row) ? total + numberValue(row.amount) : total
+  ), 0);
+}
+
+function accountingModel(data) {
+  const spending = data.spending || [];
+  const income = data.income || [];
+  const loans = data.loans || [];
+  const totalIncome = sumRows(income);
+  const tuitionPaid = sumRows(spending, (row) => row.category === "Tuition");
+  const carCost = sumRows(spending, (row) => row.category === "Car");
+  const extractedValue = sumRows(spending, (row) => row.category === "Extracted Value");
+  const operatingExpenses = sumRows(spending, (row) => (
+    !["Tuition", "Car", "Extracted Value", "Set Category"].includes(row.category)
+  ));
+  const unclassifiedExpenses = sumRows(spending, (row) => row.category === "Set Category");
+  const totalSpending = tuitionPaid + carCost + extractedValue + operatingExpenses + unclassifiedExpenses;
+  const cash = totalIncome - totalSpending;
+  const loanPrincipal = loans.reduce((total, row) => total + numberValue(row.principal), 0);
+  const loanInterest = loans.reduce((total, row) => total + loanAmounts(row).interest, 0);
+  const educationCost = tuitionPaid + loanPrincipal;
+  const educationAppreciation = educationCost * 0.08;
+  const carDepreciation = carCost * 0.15;
+  const currentLiabilities = loanInterest + Math.min(loanPrincipal * 0.1, loanPrincipal);
+  const adjustedExpenses = operatingExpenses + unclassifiedExpenses + loanInterest + carDepreciation;
+  const netIncome = totalIncome + educationAppreciation - adjustedExpenses;
+
+  const assets = [
+    { label: "Cash Position", amount: cash },
+    { label: "Education Asset at Cost", amount: educationCost },
+    { label: "Unrealized Education Appreciation", amount: educationAppreciation },
+    { label: "Vehicle at Cost", amount: carCost },
+    { label: "Less: Accumulated Depreciation", amount: -carDepreciation }
+  ];
+  const liabilities = [
+    { label: "Student Loans Payable", amount: loanPrincipal },
+    { label: "Accrued Interest Payable", amount: loanInterest }
+  ].filter((row) => row.amount > 0);
+  const assetTotal = assets.reduce((total, row) => total + row.amount, 0);
+  const liabilityTotal = liabilities.reduce((total, row) => total + row.amount, 0);
+  const equityTotal = assetTotal - liabilityTotal;
+  const equity = [
+    { label: "Owner Capital, Closing", amount: equityTotal },
+    { label: "Adjusted Net Income", amount: netIncome },
+    { label: "Owner Draws", amount: -extractedValue },
+    { label: "Accumulated OCI: Education", amount: educationAppreciation }
+  ];
+
+  const accounts = {
+    cash: { code: "101", name: "Cash", type: "Asset", normal: "Debit" },
+    education: { code: "151", name: "Education Asset", type: "Asset", normal: "Debit" },
+    vehicle: { code: "161", name: "Vehicle", type: "Asset", normal: "Debit" },
+    accumDep: { code: "169", name: "Accumulated Depreciation - Vehicle", type: "Contra Asset", normal: "Credit" },
+    loan: { code: "201", name: "Student Loans Payable", type: "Liability", normal: "Credit" },
+    interestPayable: { code: "202", name: "Accrued Interest Payable", type: "Liability", normal: "Credit" },
+    revenue: { code: "401", name: "Personal Income Revenue", type: "Revenue", normal: "Credit" },
+    appreciation: { code: "451", name: "Unrealized Appreciation Gain", type: "Revenue", normal: "Credit" },
+    operatingExpense: { code: "501", name: "Operating Expense", type: "Expense", normal: "Debit" },
+    unclassifiedExpense: { code: "509", name: "Unclassified Expense", type: "Expense", normal: "Debit" },
+    interestExpense: { code: "521", name: "Interest Expense", type: "Expense", normal: "Debit" },
+    depreciationExpense: { code: "531", name: "Depreciation Expense", type: "Expense", normal: "Debit" },
+    draws: { code: "302", name: "Owner Draws", type: "Contra Equity", normal: "Debit" }
+  };
+
+  const journalEntries = [
+    {
+      title: "Recognize Income",
+      lines: [
+        ["Debit", "cash", totalIncome],
+        ["Credit", "revenue", totalIncome]
+      ]
+    },
+    {
+      title: "Record Operating Spending",
+      lines: [
+        ["Debit", "operatingExpense", operatingExpenses],
+        ["Credit", "cash", operatingExpenses]
+      ]
+    },
+    {
+      title: "Clear Unclassified Spending",
+      lines: [
+        ["Debit", "unclassifiedExpense", unclassifiedExpenses],
+        ["Credit", "cash", unclassifiedExpenses]
+      ]
+    },
+    {
+      title: "Capitalize Education",
+      lines: [
+        ["Debit", "education", tuitionPaid],
+        ["Credit", "cash", tuitionPaid]
+      ]
+    },
+    {
+      title: "Capitalize Vehicle",
+      lines: [
+        ["Debit", "vehicle", carCost],
+        ["Credit", "cash", carCost]
+      ]
+    },
+    {
+      title: "Record Owner Draws",
+      lines: [
+        ["Debit", "draws", extractedValue],
+        ["Credit", "cash", extractedValue]
+      ]
+    },
+    {
+      title: "Record Student Loan Principal",
+      lines: [
+        ["Debit", "education", loanPrincipal],
+        ["Credit", "loan", loanPrincipal]
+      ]
+    },
+    {
+      title: "Accrue Loan Interest",
+      lines: [
+        ["Debit", "interestExpense", loanInterest],
+        ["Credit", "interestPayable", loanInterest]
+      ]
+    },
+    {
+      title: "Record Appreciation",
+      lines: [
+        ["Debit", "education", educationAppreciation],
+        ["Credit", "appreciation", educationAppreciation]
+      ]
+    },
+    {
+      title: "Record Depreciation",
+      lines: [
+        ["Debit", "depreciationExpense", carDepreciation],
+        ["Credit", "accumDep", carDepreciation]
+      ]
+    }
+  ].filter((entry) => entry.lines.some(([, , amount]) => amount > 0));
+  const trialBalance = Object.entries(accounts).map(([key, account]) => {
+    const naturalBalance = journalEntries.reduce((balance, entry) => {
+      return balance + entry.lines.reduce((lineBalance, [side, lineKey, amount]) => {
+        if (lineKey !== key) {
+          return lineBalance;
+        }
+        const isNormalSide = side === account.normal;
+        return lineBalance + (isNormalSide ? amount : -amount);
+      }, 0);
+    }, 0);
+    const isDebit = account.normal === "Debit" ? naturalBalance >= 0 : naturalBalance < 0;
+    return {
+      ...account,
+      key,
+      balance: naturalBalance,
+      debit: isDebit ? Math.abs(naturalBalance) : 0,
+      credit: isDebit ? 0 : Math.abs(naturalBalance)
+    };
+  }).filter((account) => Math.abs(account.balance) > 0.005);
+  const trialDebitTotal = trialBalance.reduce((total, account) => total + account.debit, 0);
+  const trialCreditTotal = trialBalance.reduce((total, account) => total + account.credit, 0);
+  const monthsCovered = Math.max(1, new Set([...spending, ...income].map((row) => {
+    const date = parseAppDate(row.date);
+    return date ? `${date.getFullYear()}-${date.getMonth()}` : "";
+  }).filter(Boolean)).size);
+  const monthlyBurn = adjustedExpenses / monthsCovered;
+
+  return {
+    assets,
+    liabilities,
+    equity,
+    assetTotal,
+    liabilityTotal,
+    equityTotal,
+    journalEntries: journalEntries.map((entry) => ({
+      ...entry,
+      lines: entry.lines.map(([side, accountKey, amount]) => [side, accounts[accountKey].name, amount])
+    })),
+    trialBalance,
+    trialDebitTotal,
+    trialCreditTotal,
+    incomeStatement: [
+      { label: "Personal Income Revenue", amount: totalIncome },
+      { label: "Unrealized Appreciation Gain", amount: educationAppreciation },
+      { label: "Operating Expense", amount: -operatingExpenses },
+      { label: "Unclassified Expense", amount: -unclassifiedExpenses },
+      { label: "Interest Expense", amount: -loanInterest },
+      { label: "Depreciation Expense", amount: -carDepreciation },
+      { label: "Adjusted Net Income", amount: netIncome }
+    ].filter((row) => Math.abs(row.amount) > 0.005),
+    cashFlow: [
+      { label: "Operating Cash Flow", amount: totalIncome - operatingExpenses - unclassifiedExpenses },
+      { label: "Investing Cash Flow", amount: -(tuitionPaid + carCost) },
+      { label: "Financing Cash Flow", amount: loanPrincipal - extractedValue },
+      { label: "Net Change in Cash", amount: cash }
+    ],
+    adjustments: [
+      { label: "Accrual: Loan Interest", amount: loanInterest },
+      { label: "Deferral: Capitalized Tuition", amount: tuitionPaid },
+      { label: "Deferral: Capitalized Vehicle", amount: carCost },
+      { label: "Estimate: Education Appreciation", amount: educationAppreciation },
+      { label: "Estimate: Vehicle Depreciation", amount: carDepreciation },
+      { label: "Closing: Revenue to Equity", amount: totalIncome + educationAppreciation },
+      { label: "Closing: Expenses to Equity", amount: -adjustedExpenses },
+      { label: "Closing: Draws to Equity", amount: -extractedValue }
+    ].filter((row) => Math.abs(row.amount) > 0.005),
+    ratios: [
+      { label: "Working Capital", amount: cash - currentLiabilities },
+      { label: "Current Ratio", amount: currentLiabilities > 0 ? cash / currentLiabilities : 0, display: currentLiabilities > 0 ? `${(cash / currentLiabilities).toFixed(2)}x` : "n/a" },
+      { label: "Debt to Assets", amount: assetTotal > 0 ? liabilityTotal / assetTotal : 0, display: assetTotal > 0 ? `${((liabilityTotal / assetTotal) * 100).toFixed(1)}%` : "n/a" },
+      { label: "Debt to Equity", amount: equityTotal ? liabilityTotal / equityTotal : 0, display: equityTotal ? `${(liabilityTotal / equityTotal).toFixed(2)}x` : "n/a" },
+      { label: "Equity Ratio", amount: assetTotal > 0 ? equityTotal / assetTotal : 0, display: assetTotal > 0 ? `${((equityTotal / assetTotal) * 100).toFixed(1)}%` : "n/a" },
+      { label: "Monthly Burn", amount: monthlyBurn },
+      { label: "Cash Runway", amount: monthlyBurn > 0 ? cash / monthlyBurn : 0, display: monthlyBurn > 0 ? `${(cash / monthlyBurn).toFixed(1)} mo` : "n/a" },
+      { label: "Trial Balance Difference", amount: trialDebitTotal - trialCreditTotal }
+    ]
+  };
+}
+
+function renderAccountingList(kind, rows) {
+  accountingElements.lists[kind].replaceChildren(
+    ...rows.map((row) => {
+      const element = document.createElement("div");
+      element.className = "accounting-row";
+      element.append(document.createElement("span"));
+      element.append(document.createElement("strong"));
+      element.children[0].textContent = row.label;
+      element.children[1].textContent = row.display || money(row.amount);
+      return element;
+    })
+  );
+}
+
+function renderTrialBalance(rows, debitTotal, creditTotal) {
+  accountingElements.trialBalance.replaceChildren(
+    ...[
+      (() => {
+        const header = document.createElement("div");
+        header.className = "trial-balance-row trial-balance-header";
+        for (const value of ["Code", "Account", "Class", "Normal", "Debit", "Credit"]) {
+          const cellElement = document.createElement("span");
+          cellElement.textContent = value;
+          header.append(cellElement);
+        }
+        return header;
+      })(),
+      ...rows.map((row) => {
+        const element = document.createElement("div");
+        element.className = "trial-balance-row";
+        for (const value of [
+          row.code,
+          row.name,
+          row.type,
+          row.normal,
+          row.debit ? money(row.debit) : "",
+          row.credit ? money(row.credit) : ""
+        ]) {
+          const cellElement = document.createElement("span");
+          cellElement.textContent = value;
+          element.append(cellElement);
+        }
+        return element;
+      }),
+      (() => {
+        const total = document.createElement("div");
+        total.className = "trial-balance-row trial-balance-total";
+        for (const value of ["", "Total", "", "", money(debitTotal), money(creditTotal)]) {
+          const cellElement = document.createElement("span");
+          cellElement.textContent = value;
+          total.append(cellElement);
+        }
+        return total;
+      })()
+    ]
+  );
+}
+
+function renderJournalEntries(entries) {
+  accountingElements.journal.replaceChildren(
+    ...entries.map((entry) => {
+      const article = document.createElement("article");
+      article.className = "journal-entry";
+      const title = document.createElement("strong");
+      title.textContent = entry.title;
+      article.append(title);
+
+      for (const [side, account, amount] of entry.lines) {
+        const line = document.createElement("div");
+        line.className = side === "Credit" ? "journal-line is-credit" : "journal-line";
+        line.append(document.createElement("span"));
+        line.append(document.createElement("span"));
+        line.append(document.createElement("strong"));
+        line.children[0].textContent = side;
+        line.children[1].textContent = account;
+        line.children[2].textContent = money(amount);
+        article.append(line);
+      }
+
+      return article;
+    })
+  );
+}
+
+function renderAccounting(data) {
+  const model = accountingModel(data);
+  const checkDifference = model.assetTotal - model.liabilityTotal - model.equityTotal;
+
+  accountingElements.assets.textContent = money(model.assetTotal);
+  accountingElements.liabilities.textContent = money(model.liabilityTotal);
+  accountingElements.equity.textContent = money(model.equityTotal);
+  accountingElements.check.textContent = Math.abs(checkDifference) < 0.01 ? "Balanced" : money(checkDifference);
+  accountingElements.equation.textContent = `${money(model.assetTotal)} = ${money(model.liabilityTotal)} + ${money(model.equityTotal)}`;
+  accountingElements.date.textContent = displayAppDate(`${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`);
+
+  renderAccountingList("assets", model.assets);
+  renderAccountingList("liabilities", model.liabilities);
+  renderAccountingList("equity", model.equity);
+  renderAccountingList("ratios", model.ratios);
+  renderAccountingList("incomeStatement", model.incomeStatement);
+  renderAccountingList("cashFlow", model.cashFlow);
+  renderAccountingList("adjustments", model.adjustments);
+  renderTrialBalance(model.trialBalance, model.trialDebitTotal, model.trialCreditTotal);
+  renderJournalEntries(model.journalEntries);
 }
 
 function createBudgetCategoryRow(category = "Set Category", amount = "") {
@@ -820,6 +1169,7 @@ function render(data) {
   renderLedger("income", data.income);
   renderBudgets();
   renderDebt();
+  renderAccounting(data);
   renderPlaidButton(plaidStatusText);
 }
 
@@ -950,6 +1300,11 @@ for (const link of pageLinks) {
     }
   });
 }
+
+openAccountingButton.addEventListener("click", () => {
+  showPage("accounting");
+  location.hash = "#accounting";
+});
 
 document.querySelector("[data-open-budget]").addEventListener("click", () => openBudgetForm());
 
@@ -1147,6 +1502,12 @@ plaidForm.addEventListener("submit", async (event) => {
   openPlaidReview(Math.min(activePlaidIndex, pendingPlaidTransactions.length - 1));
 });
 
-const initialPage = location.hash === "#budget" ? "budget" : location.hash === "#debt" ? "debt" : "finance";
+const initialPage = location.hash === "#budget"
+  ? "budget"
+  : location.hash === "#debt"
+    ? "debt"
+    : location.hash === "#accounting"
+      ? "accounting"
+      : "finance";
 showPage(initialPage);
 renderCurrent({ syncPlaid: initialPage === "finance" });

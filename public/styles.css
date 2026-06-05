@@ -90,6 +90,7 @@ main {
 }
 
 .finance-page,
+.accounting-page,
 .debt-page {
   width: 100%;
   padding: 28px 24px 0;
@@ -234,6 +235,141 @@ h2 {
   color: var(--text-active);
   font-size: 20px;
   font-weight: 500;
+}
+
+.accounting-equation,
+.accounting-date {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.accounting-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 18px;
+  margin: 22px 0 28px;
+}
+
+.accounting-analytics {
+  margin: -6px 0 28px;
+}
+
+.accounting-analytics .accounting-list {
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 0 24px;
+}
+
+.accounting-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+
+.accounting-list,
+.journal-list,
+.trial-balance-list {
+  display: grid;
+  gap: 0;
+}
+
+.accounting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 34px;
+  gap: 16px;
+  border-bottom: 1px solid var(--row-line);
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.accounting-row strong {
+  color: var(--text-active);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.accounting-ledger {
+  margin-top: 34px;
+}
+
+.accounting-statement-grid {
+  margin-top: 34px;
+}
+
+.trial-balance-row {
+  display: grid;
+  grid-template-columns: 58px minmax(180px, 1fr) 118px 76px 100px 100px;
+  align-items: center;
+  min-height: 30px;
+  gap: 12px;
+  border-bottom: 1px solid var(--row-line);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.trial-balance-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trial-balance-row span:nth-last-child(-n + 2) {
+  color: var(--text-active);
+  text-align: right;
+}
+
+.trial-balance-total {
+  color: var(--text-active);
+  font-weight: 500;
+}
+
+.trial-balance-header {
+  min-height: 28px;
+  color: var(--text-active);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.journal-ledger {
+  margin-top: 34px;
+  padding-bottom: 28px;
+}
+
+.journal-entry {
+  display: grid;
+  gap: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.journal-entry > strong {
+  margin-bottom: 6px;
+  color: var(--text-active);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.journal-line {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 100px;
+  align-items: center;
+  min-height: 26px;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.journal-line.is-credit span:nth-child(2) {
+  padding-left: 18px;
+}
+
+.journal-line strong {
+  color: var(--text-active);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: right;
 }
 
 .ledger {
@@ -468,23 +604,20 @@ h2 {
 .budget-category-status {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 10px;
-  margin: -8px 0 14px;
-  color: var(--text-muted);
-  font-size: 13px;
+  gap: 8px 18px;
+  margin: -4px 0 16px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .budget-category-status span {
-  padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
+  padding: 0;
 }
 
 .budget-category-status .is-over {
   color: #ffb4ad;
-  border-color: rgba(255, 122, 112, 0.34);
-  background: rgba(255, 122, 112, 0.1);
+  font-weight: 600;
 }
 
 .budget-table {
@@ -648,6 +781,23 @@ h2 {
   .finance-columns {
     grid-template-columns: 1fr;
     gap: 28px;
+  }
+
+  .accounting-summary,
+  .accounting-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-analytics .accounting-list {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-ledger {
+    overflow-x: auto;
+  }
+
+  .trial-balance-row {
+    min-width: 720px;
   }
 
   .budget-fields,
