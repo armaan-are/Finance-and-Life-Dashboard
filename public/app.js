@@ -1,4 +1,4 @@
-const ledgerConfig = {
+const defaultLedgerCategories = {
   spending: {
     categories: [
       "Set Category",
@@ -33,11 +33,7 @@ const ledgerConfig = {
     ]
   }
 };
-const budgetCategoryOptions = [
-  "Set Category",
-  "All Spending",
-  ...ledgerConfig.spending.categories.filter((category) => category !== "Set Category")
-];
+let ledgerConfig = JSON.parse(JSON.stringify(defaultLedgerCategories));
 
 const ledgerLists = {
   spending: document.querySelector('[data-ledger-list="spending"]'),
@@ -51,6 +47,12 @@ const budgetCategories = document.querySelector("[data-budget-categories]");
 const budgetDialogTitle = document.querySelector("[data-budget-dialog-title]");
 const saveBudgetButton = document.querySelector("[data-save-budget]");
 const confirmBudgetDelete = document.querySelector("[data-confirm-budget-delete]");
+const categoryDialog = document.querySelector("[data-category-dialog]");
+const categoryForm = document.querySelector("[data-category-form]");
+const categoryDialogTitle = document.querySelector("[data-category-dialog-title]");
+const categoryNameInput = document.querySelector("[data-category-name]");
+const categoryStatus = document.querySelector("[data-category-status]");
+const saveCategoryButton = document.querySelector("[data-save-category]");
 const budgetsScroll = document.querySelector("[data-budgets-scroll]");
 const plaidStatus = document.querySelector("[data-plaid-status]");
 const linkBankButton = document.querySelector("[data-link-bank]");
@@ -82,6 +84,8 @@ let activePlaidIndex = 0;
 let plaidStatusText = "";
 let linkedPlaidItems = [];
 let plaidConfigured = false;
+let plaidSyncPromise = null;
+let categoryLedger = "spending";
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -113,7 +117,7 @@ function categorySelect(ledger, row) {
   const editor = document.createElement("select");
   editor.className = "ledger-select";
 
-  for (const category of ledgerConfig[ledger].categories) {
+  for (const category of categoriesForLedger(ledger, row.category)) {
     const option = document.createElement("option");
     option.value = category;
     option.textContent = category;
@@ -123,6 +127,45 @@ function categorySelect(ledger, row) {
   editor.value = row.category || "Set Category";
   editor.addEventListener("change", () => saveField(ledger, row.id, "category", editor.value));
   return editor;
+}
+
+function uniqueCategories(categories) {
+  const seen = new Set();
+  return categories.filter((category) => {
+    const key = String(category || "").toLowerCase();
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function categoriesForLedger(ledger, selected = "") {
+  return uniqueCategories([
+    ...(ledgerConfig[ledger]?.categories || defaultLedgerCategories[ledger].categories),
+    selected
+  ]);
+}
+
+function budgetCategoryOptions(selected = "") {
+  return uniqueCategories([
+    "Set Category",
+    "All Spending",
+    ...categoriesForLedger("spending").filter((category) => category !== "Set Category"),
+    selected
+  ]);
+}
+
+function updateLedgerCategories(categories = {}) {
+  ledgerConfig = {
+    spending: {
+      categories: uniqueCategories(categories.spending || defaultLedgerCategories.spending.categories)
+    },
+    income: {
+      categories: uniqueCategories(categories.income || defaultLedgerCategories.income.categories)
+    }
+  };
 }
 
 function textInput(ledger, row, field, value) {
@@ -247,6 +290,69 @@ async function saveField(ledger, id, field, value) {
     body: JSON.stringify({ [field]: value })
   });
   renderCurrent();
+}
+
+function currentBudgetCategoryRows() {
+  return [...budgetCategories.querySelectorAll(".budget-category-row")].map((row) => ({
+    category: row.querySelector('[name="category"]').value,
+    amount: row.querySelector('[name="amount"]').value
+  }));
+}
+
+function refreshBudgetCategoryRows() {
+  const rows = currentBudgetCategoryRows();
+  budgetCategories.replaceChildren(
+    ...(rows.length ? rows : [{ category: "Set Category", amount: "" }])
+      .map((row) => createBudgetCategoryRow(row.category, row.amount))
+  );
+}
+
+function openCategoryForm(ledger) {
+  categoryLedger = ledger === "income" ? "income" : "spending";
+  categoryForm.reset();
+  categoryStatus.textContent = "";
+  saveCategoryButton.disabled = false;
+  categoryDialogTitle.textContent = categoryLedger === "income" ? "New Income Category" : "New Spending Category";
+  categoryDialog.showModal();
+  categoryNameInput.focus();
+}
+
+async function createCategory(ledger, name) {
+  const label = ledger === "income" ? "income" : "spending";
+  const trimmed = String(name || "").trim().replace(/\s+/g, " ");
+
+  if (!trimmed) {
+    categoryStatus.textContent = "Enter a category name.";
+    return;
+  }
+
+  saveCategoryButton.disabled = true;
+  categoryStatus.textContent = "Creating category...";
+
+  try {
+    const result = await api("/api/categories", {
+      method: "POST",
+      body: JSON.stringify({ ledger: label, name: trimmed })
+    });
+    updateLedgerCategories(result.categories);
+
+    if (result.duplicate) {
+      categoryStatus.textContent = "That category already exists.";
+      saveCategoryButton.disabled = false;
+      return;
+    }
+
+    if (budgetDialog.open && label === "spending") {
+      refreshBudgetCategoryRows();
+    } else {
+      await renderCurrent();
+    }
+
+    categoryDialog.close();
+  } catch (error) {
+    categoryStatus.textContent = "Could not create category. Restart the server if this keeps happening.";
+    saveCategoryButton.disabled = false;
+  }
 }
 
 function renderLedger(ledger, rows) {
@@ -381,7 +487,7 @@ function createBudgetCategoryRow(category = "Set Category", amount = "") {
   const select = document.createElement("select");
   select.className = "ledger-select";
   select.name = "category";
-  for (const optionCategory of budgetCategoryOptions) {
+  for (const optionCategory of budgetCategoryOptions(category)) {
     const option = document.createElement("option");
     option.value = optionCategory;
     option.textContent = optionCategory;
@@ -422,10 +528,14 @@ function openDeleteBudgetConfirm(budgetId) {
   confirmBudgetDelete.showModal();
 }
 
-function budgetSegment(className, value, total) {
+function budgetSegment(className, value, total, label = "") {
   const segment = document.createElement("i");
   segment.className = className;
   segment.style.width = `${total > 0 ? (Math.max(value, 0) / total) * 100 : 0}%`;
+  if (label) {
+    segment.title = label;
+    segment.setAttribute("aria-label", label);
+  }
   return segment;
 }
 
@@ -435,25 +545,31 @@ function budgetStackedBar(parts) {
 
   const bar = document.createElement("div");
   bar.className = "budget-stack-track";
-  const total = parts.spendingAllowed + parts.tuitionAllowed + parts.requiredIncome;
-  bar.append(budgetSegment("spent", parts.spent, total));
-  bar.append(budgetSegment("car-spent", parts.carSpent, total));
-  bar.append(budgetSegment("tuition-spent", parts.tuitionSpent, total));
-  bar.append(budgetSegment("spending-left", parts.spendingRemaining, total));
-  bar.append(budgetSegment("car-left", parts.carRemaining, total));
-  bar.append(budgetSegment("tuition-left", parts.tuitionRemaining, total));
-  bar.append(budgetSegment("income-made", parts.incomeMade, total));
-  bar.append(budgetSegment("income-left", parts.incomeRemaining, total));
+  const categoryTotal = parts.categories.reduce((total, row) => (
+    total + Math.max(row.allowed, row.spent)
+  ), 0);
+  const incomeTotal = parts.income ? Math.max(parts.income.required, parts.income.made) : 0;
+  const total = categoryTotal + incomeTotal;
+
+  for (const row of parts.categories) {
+    bar.append(budgetSegment("spent", row.spent, total, `${row.category} spent ${formatNumber(row.spent)}`));
+    bar.append(budgetSegment("spending-left", row.left, total, `${row.category} left ${formatNumber(row.left)}`));
+    bar.append(budgetSegment("over-spent", row.over, total, `${row.category} over ${formatNumber(row.over)}`));
+  }
+
+  if (parts.income) {
+    bar.append(budgetSegment("income-made", parts.income.made, total, `Income made ${formatNumber(parts.income.made)}`));
+    bar.append(budgetSegment("income-left", parts.income.left, total, `Income needed ${formatNumber(parts.income.left)}`));
+  }
 
   const legend = document.createElement("div");
   legend.className = "budget-stack-legend";
   const labels = [
-    ["Spent", parts.spent],
-    ["Car", parts.carSpent + parts.carRemaining],
-    ["Tuition", parts.tuitionSpent + parts.tuitionRemaining],
-    ["Left to Spend", parts.spendingRemaining],
-    ["Income Made", parts.incomeMade],
-    ["Income Needed", parts.incomeRemaining]
+    ["Spent", parts.categories.reduce((total, row) => total + row.spent, 0)],
+    ["Left to Spend", parts.categories.reduce((total, row) => total + row.left, 0)],
+    ["Over", parts.categories.reduce((total, row) => total + row.over, 0)],
+    ["Income Made", parts.income?.made || 0],
+    ["Income Needed", parts.income?.left || 0]
   ].filter(([, value]) => value > 0);
 
   for (const [label, value] of labels) {
@@ -465,6 +581,54 @@ function budgetStackedBar(parts) {
   wrapper.append(bar);
   wrapper.append(legend);
   return wrapper;
+}
+
+function budgetCategorySummaries(budget, rangeSpending) {
+  const explicitCategories = new Set(
+    budget.categories
+      .map((row) => row.category)
+      .filter((category) => category !== "Set Category" && category !== "All Spending")
+  );
+
+  return budget.categories
+    .filter((row) => row.category && row.category !== "Set Category")
+    .map((row) => {
+      const allowed = numberValue(row.amount);
+      const spent = rangeSpending.reduce((total, spendingRow) => {
+        if (row.category === "All Spending") {
+          return explicitCategories.has(spendingRow.category) || spendingRow.category === "Tuition"
+            ? total
+            : total + numberValue(spendingRow.amount);
+        }
+        return spendingRow.category === row.category ? total + numberValue(spendingRow.amount) : total;
+      }, 0);
+
+      return {
+        category: row.category,
+        allowed,
+        spent,
+        left: Math.max(allowed - spent, 0),
+        over: Math.max(spent - allowed, 0)
+      };
+    })
+    .filter((row) => row.allowed > 0 || row.spent > 0);
+}
+
+function budgetCategoryStatusRows(summaries) {
+  const list = document.createElement("div");
+  list.className = "budget-category-status";
+
+  for (const row of summaries) {
+    const item = document.createElement("span");
+    const balance = row.over > 0
+      ? `${formatNumber(row.over)} over`
+      : `${formatNumber(row.left)} left`;
+    item.className = row.over > 0 ? "is-over" : "";
+    item.textContent = `${row.category}: ${balance}`;
+    list.append(item);
+  }
+
+  return list;
 }
 
 function combinedBudgetRows(budget) {
@@ -497,52 +661,42 @@ function renderBudgetTable(rows) {
   return table;
 }
 
+function budgetSortTime(budget) {
+  return parseDateValue(budget.startDate) || parseDateValue(budget.endDate) || 0;
+}
+
+function budgetIsCurrent(budget, today = new Date()) {
+  const start = parseDateValue(budget.startDate);
+  const end = parseDateValue(budget.endDate);
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+
+  if (start !== null && current < start) {
+    return false;
+  }
+  if (end !== null && current > end) {
+    return false;
+  }
+  return start !== null || end !== null;
+}
+
+function sortedBudgetsForDisplay(budgets) {
+  const today = new Date();
+  return [...budgets].sort((a, b) => {
+    const currentSort = Number(budgetIsCurrent(b, today)) - Number(budgetIsCurrent(a, today));
+    if (currentSort) {
+      return currentSort;
+    }
+
+    return budgetSortTime(b) - budgetSortTime(a) || b.id - a.id;
+  });
+}
+
 function renderBudgets() {
   budgetsScroll.replaceChildren(
-    ...[...financeData.budgets].sort((a, b) => b.id - a.id).map((budget) => {
-      const categoryBudget = budget.categories.reduce((total, row) => total + numberValue(row.amount), 0);
+    ...sortedBudgetsForDisplay(financeData.budgets).map((budget) => {
       const rangeSpending = financeData.spending.filter((row) => inDateRange(row.date, budget.startDate, budget.endDate));
       const rangeIncome = financeData.income.filter((row) => inDateRange(row.date, budget.startDate, budget.endDate));
-      const budgetedCategories = new Set(
-        budget.categories
-          .map((row) => row.category)
-          .filter((category) => category !== "Set Category" && category !== "All Spending")
-      );
-      const hasAllSpending = budget.categories.some((row) => row.category === "All Spending");
-      const hasCar = budgetedCategories.has("Car");
-      const hasTuition = budgetedCategories.has("Tuition");
-      const amountSpent = rangeSpending.reduce((total, row) => {
-        if (row.category === "Tuition") {
-          return total;
-        }
-        if (hasAllSpending && !budgetedCategories.has(row.category) && row.category !== "Tuition") {
-          return total + numberValue(row.amount);
-        }
-        if (budgetedCategories.has(row.category)) {
-          return total + numberValue(row.amount);
-        }
-        return total;
-      }, 0);
-      const carSpent = hasCar
-        ? rangeSpending
-          .filter((row) => row.category === "Car")
-          .reduce((total, row) => total + numberValue(row.amount), 0)
-        : 0;
-      const tuitionSpent = hasTuition
-        ? rangeSpending
-          .filter((row) => row.category === "Tuition")
-          .reduce((total, row) => total + numberValue(row.amount), 0)
-        : 0;
-      const carAllowed = hasCar
-        ? budget.categories
-          .filter((row) => row.category === "Car")
-          .reduce((total, row) => total + numberValue(row.amount), 0)
-        : 0;
-      const tuitionAllowed = hasTuition
-        ? budget.categories
-          .filter((row) => row.category === "Tuition")
-          .reduce((total, row) => total + numberValue(row.amount), 0)
-        : 0;
+      const categorySummaries = budgetCategorySummaries(budget, rangeSpending);
       const requiredIncome = numberValue(budget.requiredIncome);
       const incomeMade = rangeIncome.reduce((total, row) => total + numberValue(row.amount), 0);
       const card = document.createElement("article");
@@ -561,6 +715,7 @@ function renderBudgets() {
       title.children[2].setAttribute("aria-label", "Delete budget");
       title.children[2].addEventListener("click", () => openDeleteBudgetConfirm(budget.id));
       card.append(title);
+      card.append(budgetCategoryStatusRows(categorySummaries));
 
       const actions = document.createElement("div");
       actions.className = "budget-actions";
@@ -573,17 +728,12 @@ function renderBudgets() {
       card.append(actions);
 
       card.append(budgetStackedBar({
-        spendingAllowed: Math.max(categoryBudget - tuitionAllowed, 0),
-        tuitionAllowed,
-        requiredIncome,
-        spent: Math.max(amountSpent - carSpent, 0),
-        carSpent,
-        tuitionSpent,
-        spendingRemaining: Math.max(categoryBudget - tuitionAllowed - amountSpent - Math.max(carAllowed - carSpent, 0), 0),
-        carRemaining: Math.max(carAllowed - carSpent, 0),
-        tuitionRemaining: Math.max(tuitionAllowed - tuitionSpent, 0),
-        incomeMade: Math.min(incomeMade, requiredIncome),
-        incomeRemaining: Math.max(requiredIncome - incomeMade, 0)
+        categories: categorySummaries,
+        income: requiredIncome > 0 ? {
+          required: requiredIncome,
+          made: Math.min(incomeMade, requiredIncome),
+          left: Math.max(requiredIncome - incomeMade, 0)
+        } : null
       }));
       card.append(renderBudgetTable(combinedBudgetRows(budget)));
       return card;
@@ -661,6 +811,7 @@ function renderSummary(data) {
 
 function render(data) {
   financeData = { ...financeData, ...data };
+  updateLedgerCategories(data.categories);
   pendingPlaidTransactions = data.plaidTransactions || pendingPlaidTransactions || [];
   linkedPlaidItems = data.plaidItems || linkedPlaidItems || [];
   plaidConfigured = Boolean(data.plaidConfigured);
@@ -689,30 +840,50 @@ function renderPlaidButton(statusText = "") {
 }
 
 async function syncPlaidTransactions() {
-  plaidStatus.textContent = "Checking Plaid...";
-  try {
-    const result = await api("/api/plaid/transactions/sync", { method: "POST" });
-    pendingPlaidTransactions = result.pending || [];
-    linkedPlaidItems = result.linkedItems || linkedPlaidItems;
-    if (!result.configured) {
-      plaidStatusText = "Plaid not configured";
-      renderPlaidButton(plaidStatusText);
-      return;
-    }
-    plaidConfigured = true;
-    plaidStatusText = "";
-    renderPlaidButton(plaidStatusText);
-  } catch (error) {
-    plaidStatusText = "Plaid check failed";
-    renderPlaidButton(plaidStatusText);
+  if (plaidSyncPromise) {
+    return plaidSyncPromise;
   }
+
+  plaidStatus.textContent = "Checking Plaid...";
+  plaidSyncPromise = api("/api/plaid/transactions/sync", { method: "POST" })
+    .then((result) => {
+      pendingPlaidTransactions = result.pending || [];
+      linkedPlaidItems = result.linkedItems || linkedPlaidItems;
+      if (!result.configured) {
+        plaidStatusText = "Plaid not configured";
+        renderPlaidButton(plaidStatusText);
+        return result;
+      }
+      plaidConfigured = true;
+      plaidStatusText = "";
+      renderPlaidButton(plaidStatusText);
+      return result;
+    })
+    .catch((error) => {
+      plaidStatusText = "Plaid check failed";
+      renderPlaidButton(plaidStatusText);
+      return null;
+    })
+    .finally(() => {
+      plaidSyncPromise = null;
+    });
+
+  return plaidSyncPromise;
 }
 
 async function renderCurrent(options = {}) {
-  if (options.syncPlaid) {
-    await syncPlaidTransactions();
-  }
   render(await api("/api/finance"));
+
+  if (options.syncPlaid) {
+    syncPlaidTransactions().then(async (result) => {
+      if (result) {
+        render(await api("/api/finance"));
+      }
+    }).catch(() => {
+      plaidStatusText = "Plaid check failed";
+      renderPlaidButton(plaidStatusText);
+    });
+  }
 }
 
 for (const button of document.querySelectorAll("[data-add-ledger]")) {
@@ -791,6 +962,19 @@ document.querySelector("[data-add-budget-category]").addEventListener("click", (
   budgetCategories.append(createBudgetCategoryRow());
 });
 
+for (const button of document.querySelectorAll("[data-add-category]")) {
+  button.addEventListener("click", () => openCategoryForm(button.dataset.addCategory));
+}
+
+document.querySelector("[data-close-category]").addEventListener("click", () => {
+  categoryDialog.close();
+});
+
+categoryForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await createCategory(categoryLedger, categoryNameInput.value);
+});
+
 budgetForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(budgetForm);
@@ -827,15 +1011,16 @@ document.querySelector("[data-confirm-budget-delete-button]").addEventListener("
 });
 
 function populatePlaidCategories(ledger, selected = "Set Category") {
+  const categories = categoriesForLedger(ledger, selected);
   plaidCategorySelect.replaceChildren(
-    ...ledgerConfig[ledger].categories.map((category) => {
+    ...categories.map((category) => {
       const option = document.createElement("option");
       option.value = category;
       option.textContent = category;
       return option;
     })
   );
-  plaidCategorySelect.value = ledgerConfig[ledger].categories.includes(selected) ? selected : "Set Category";
+  plaidCategorySelect.value = categories.includes(selected) ? selected : "Set Category";
 }
 
 function activePlaidTransaction() {

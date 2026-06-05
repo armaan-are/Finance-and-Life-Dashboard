@@ -84,14 +84,20 @@
           <section class="ledger" aria-labelledby="spending-title">
             <div class="ledger-head">
               <h2 id="spending-title">Spending</h2>
-              <button class="add-button" type="button" data-add-ledger="spending">Add</button>
+              <div class="ledger-actions">
+                <button class="add-button" type="button" data-add-category="spending">Add Category</button>
+                <button class="add-button" type="button" data-add-ledger="spending">Add</button>
+              </div>
             </div>
             <div class="ledger-list" data-ledger-list="spending" aria-label="Spending log"></div>
           </section>
           <section class="ledger" aria-labelledby="income-title">
             <div class="ledger-head">
               <h2 id="income-title">Income</h2>
-              <button class="add-button" type="button" data-add-ledger="income">Add</button>
+              <div class="ledger-actions">
+                <button class="add-button" type="button" data-add-category="income">Add Category</button>
+                <button class="add-button" type="button" data-add-ledger="income">Add</button>
+              </div>
             </div>
             <div class="ledger-list" data-ledger-list="income" aria-label="Income log"></div>
           </section>
@@ -184,7 +190,10 @@
           </label>
         </div>
         <div class="budget-category-editor" data-budget-categories></div>
-        <button class="add-button" type="button" data-add-budget-category>Add Category</button>
+        <div class="budget-form-actions">
+          <button class="add-button" type="button" data-add-budget-category>Add Category</button>
+          <button class="add-button" type="button" data-add-category="spending">New Spending Category</button>
+        </div>
         <button class="add-button save-budget" type="submit" data-save-budget>Create Budget</button>
       </form>
     </dialog>
@@ -196,6 +205,20 @@
         </div>
         <p>Delete this budget?</p>
         <button class="add-button save-budget" type="button" data-confirm-budget-delete-button>Delete</button>
+      </form>
+    </dialog>
+    <dialog class="budget-dialog category-dialog" data-category-dialog>
+      <form class="budget-form" method="dialog" data-category-form>
+        <div class="budget-dialog-head">
+          <h2 data-category-dialog-title>New Category</h2>
+          <button class="delete-row" type="button" data-close-category aria-label="Close category form">x</button>
+        </div>
+        <label class="category-name-field">
+          <span>Name</span>
+          <input class="ledger-input" name="name" type="text" data-category-name required>
+        </label>
+        <p class="category-dialog-status" data-category-status></p>
+        <button class="add-button save-budget" type="submit" data-save-category>Create Category</button>
       </form>
     </dialog>
     <dialog class="budget-dialog plaid-dialog" data-plaid-dialog>

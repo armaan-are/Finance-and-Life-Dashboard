@@ -54,6 +54,37 @@ const ledgers = {
   spending: "spending",
   income: "income"
 };
+const defaultCategories = {
+  spending: [
+    "Set Category",
+    "Alcohol",
+    "Subscriptions",
+    "Clothing",
+    "Educational",
+    "Luxuries",
+    "Necessities",
+    "Dining",
+    "Transportation",
+    "Gambling",
+    "Extracted Value",
+    "Tuition",
+    "Gifts",
+    "Car"
+  ],
+  income: [
+    "Set Category",
+    "Work Income",
+    "Interest",
+    "CashApp",
+    "Venmo",
+    "Tax Return",
+    "Gambling Income",
+    "Zelle",
+    "Other",
+    "Credit Cashback",
+    "Gift"
+  ]
+};
 const plaidStartDate = "2026-06-01";
 const plaidApiHosts = {
   sandbox: "https://sandbox.plaid.com",
@@ -100,6 +131,13 @@ function initDatabase() {
        category TEXT NOT NULL,
        amount TEXT NOT NULL DEFAULT '',
        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE
+     );
+     CREATE TABLE IF NOT EXISTS custom_categories (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       ledger TEXT NOT NULL,
+       name TEXT NOT NULL,
+       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       UNIQUE(ledger, name)
      );
      CREATE TABLE IF NOT EXISTS loans (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -284,6 +322,55 @@ function listBudgets() {
     ...budget,
     categories: categories.filter((category) => category.budgetId === budget.id)
   }));
+}
+
+function listCustomCategories() {
+  const output = runSql(
+    `SELECT ledger, name
+     FROM custom_categories
+     ORDER BY name COLLATE NOCASE ASC;`,
+    { json: true }
+  ).trim();
+  const rows = output ? JSON.parse(output) : [];
+
+  return Object.fromEntries(
+    Object.keys(ledgers).map((ledger) => [
+      ledger,
+      rows.filter((row) => row.ledger === ledger).map((row) => row.name)
+    ])
+  );
+}
+
+function mergedCategories() {
+  const customCategories = listCustomCategories();
+
+  return Object.fromEntries(
+    Object.entries(defaultCategories).map(([ledger, categories]) => [
+      ledger,
+      [...categories, ...(customCategories[ledger] || [])]
+    ])
+  );
+}
+
+function createCustomCategory(body) {
+  const ledger = body.ledger === "income" ? "income" : "spending";
+  const name = String(body.name || "").trim().replace(/\s+/g, " ");
+
+  if (!name) {
+    return { error: "Category name is required." };
+  }
+
+  const existingCategories = mergedCategories()[ledger].map((category) => category.toLowerCase());
+  if (existingCategories.includes(name.toLowerCase())) {
+    return { ledger, name, categories: mergedCategories(), duplicate: true };
+  }
+
+  runSql(
+    `INSERT OR IGNORE INTO custom_categories (ledger, name)
+     VALUES (${sqlString(ledger)}, ${sqlString(name)});`
+  );
+
+  return { ledger, name, categories: mergedCategories() };
 }
 
 function getPortalMeta(key) {
@@ -762,12 +849,23 @@ async function handleApi(request, response) {
       spending: listLedger("spending"),
       income: listLedger("income"),
       budgets: listBudgets(),
+      categories: mergedCategories(),
       loans: listLoans(),
       graduationDate: getPortalMeta("graduation_date"),
       plaidTransactions: listPlaidTransactions(),
       plaidItems: listPlaidItems(),
       plaidConfigured: getPlaidConfig().configured
     });
+    return true;
+  }
+
+  if (pathname === "/api/categories" && request.method === "POST") {
+    const result = createCustomCategory(await readBody(request));
+    if (result.error) {
+      sendJson(response, 400, result);
+      return true;
+    }
+    sendJson(response, result.duplicate ? 200 : 201, result);
     return true;
   }
 
