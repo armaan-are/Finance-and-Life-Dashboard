@@ -892,23 +892,49 @@ function budgetStackedBar(parts) {
   const wrapper = document.createElement("div");
   wrapper.className = "budget-stack";
 
-  const bar = document.createElement("div");
-  bar.className = "budget-stack-track";
-  const categoryTotal = parts.categories.reduce((total, row) => (
-    total + Math.max(row.allowed, row.spent)
-  ), 0);
-  const incomeTotal = parts.income ? Math.max(parts.income.required, parts.income.made) : 0;
-  const total = categoryTotal + incomeTotal;
+  const rows = document.createElement("div");
+  rows.className = "budget-stack-rows";
 
   for (const row of parts.categories) {
-    bar.append(budgetSegment("spent", row.spent, total, `${row.category} spent ${formatNumber(row.spent)}`));
+    const item = document.createElement("div");
+    item.className = "budget-stack-row";
+
+    const label = document.createElement("span");
+    label.className = "budget-stack-label";
+    label.textContent = row.category;
+
+    const bar = document.createElement("div");
+    bar.className = "budget-stack-track";
+    const total = Math.max(row.allowed, row.spent);
+    const spentInBudget = row.over > 0 ? row.allowed : row.spent;
+
+    bar.append(budgetSegment("spent", spentInBudget, total, `${row.category} spent ${formatNumber(row.spent)}`));
     bar.append(budgetSegment("spending-left", row.left, total, `${row.category} left ${formatNumber(row.left)}`));
     bar.append(budgetSegment("over-spent", row.over, total, `${row.category} over ${formatNumber(row.over)}`));
+
+    item.append(label);
+    item.append(bar);
+    rows.append(item);
   }
 
   if (parts.income) {
+    const item = document.createElement("div");
+    item.className = "budget-stack-row";
+
+    const label = document.createElement("span");
+    label.className = "budget-stack-label";
+    label.textContent = "Income";
+
+    const bar = document.createElement("div");
+    bar.className = "budget-stack-track";
+    const total = Math.max(parts.income.required, parts.income.made);
+
     bar.append(budgetSegment("income-made", parts.income.made, total, `Income made ${formatNumber(parts.income.made)}`));
     bar.append(budgetSegment("income-left", parts.income.left, total, `Income needed ${formatNumber(parts.income.left)}`));
+
+    item.append(label);
+    item.append(bar);
+    rows.append(item);
   }
 
   const legend = document.createElement("div");
@@ -927,7 +953,7 @@ function budgetStackedBar(parts) {
     legend.append(item);
   }
 
-  wrapper.append(bar);
+  wrapper.append(rows);
   wrapper.append(legend);
   return wrapper;
 }
