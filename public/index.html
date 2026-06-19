@@ -53,6 +53,7 @@
           <div class="plaid-actions">
             <span data-plaid-status></span>
             <button class="add-button" type="button" data-open-accounting>Accounting</button>
+            <button class="add-button" type="button" data-open-finance-sankey>Sankey</button>
             <button class="add-button" type="button" data-link-bank>Link Bank</button>
             <button class="add-button" type="button" data-open-plaid-review hidden>Review Plaid</button>
             <button class="add-button" type="button" data-open-plaid-skipped>Skipped Plaid</button>
@@ -308,6 +309,15 @@
         </section>
       </section>
     </main>
+    <dialog class="budget-dialog sankey-dialog finance-sankey-dialog" data-finance-sankey-dialog>
+      <form class="budget-form" method="dialog">
+        <div class="budget-dialog-head">
+          <h2>Income Flow</h2>
+          <button class="delete-row" type="button" data-close-finance-sankey aria-label="Close income flow">x</button>
+        </div>
+        <div class="sankey-chart finance-sankey-chart" data-finance-sankey-chart></div>
+      </form>
+    </dialog>
     <dialog class="budget-dialog sankey-dialog" data-work-sankey-dialog>
       <form class="budget-form" method="dialog">
         <div class="budget-dialog-head">
@@ -563,6 +573,8 @@
       <div class="plaid-imports-meta" data-plaid-skipped-count></div>
       <div class="plaid-skipped-list" data-plaid-skipped-list></div>
     </dialog>
+    <script src="/vendor/d3/d3.min.js"></script>
+    <script src="/vendor/d3-sankey/d3-sankey.min.js"></script>
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
     <script src="/app.js"></script>
   </body>

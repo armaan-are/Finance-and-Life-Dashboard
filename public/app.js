@@ -91,6 +91,8 @@ const graduationDateLabel = document.querySelector("[data-graduation-date-label]
 const workList = document.querySelector("[data-work-list]");
 const workSearch = document.querySelector("[data-work-search]");
 const workCountLabel = document.querySelector("[data-work-count-label]");
+const financeSankeyDialog = document.querySelector("[data-finance-sankey-dialog]");
+const financeSankeyChart = document.querySelector("[data-finance-sankey-chart]");
 const workSankeyDialog = document.querySelector("[data-work-sankey-dialog]");
 const workSankeyChart = document.querySelector("[data-work-sankey-chart]");
 const openAccountingButton = document.querySelector("[data-open-accounting]");
@@ -788,6 +790,152 @@ function renderWorkSankey() {
       return column;
     })
   );
+}
+
+function groupedLedgerTotals(rows, fallbackCategory) {
+  const totals = new Map();
+  for (const row of rows || []) {
+    const amount = Math.max(0, numberValue(row.amount));
+    if (amount <= 0) {
+      continue;
+    }
+    const category = row.category && row.category !== "Set Category" ? row.category : fallbackCategory;
+    totals.set(category, (totals.get(category) || 0) + amount);
+  }
+  return [...totals.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount || a.category.localeCompare(b.category));
+}
+
+function financeSankeyModel() {
+  const incomeTotals = groupedLedgerTotals(financeData.income, "Uncategorized Income");
+  const spendingTotals = groupedLedgerTotals(
+    (financeData.spending || []).filter((row) => row.category !== "Extracted Value"),
+    "Uncategorized Spending"
+  );
+  const totalIncome = incomeTotals.reduce((total, row) => total + row.amount, 0);
+  const totalSpending = spendingTotals.reduce((total, row) => total + row.amount, 0);
+  const nodes = [];
+  const links = [];
+
+  for (const source of incomeTotals) {
+    nodes.push({ id: `income:${source.category}`, name: source.category, value: source.amount, kind: "income" });
+    links.push({ source: `income:${source.category}`, target: "income-pool", value: source.amount });
+  }
+  if (totalIncome > 0 || totalSpending > 0) {
+    nodes.push({ id: "income-pool", name: "Income Pool", value: Math.max(totalIncome, totalSpending), kind: "pool" });
+  }
+  for (const target of spendingTotals) {
+    nodes.push({ id: `spending:${target.category}`, name: target.category, value: target.amount, kind: "spending" });
+    links.push({ source: "income-pool", target: `spending:${target.category}`, value: target.amount });
+  }
+
+  if (totalIncome > totalSpending) {
+    nodes.push({ id: "savings", name: "Savings", value: totalIncome - totalSpending, kind: "savings" });
+    links.push({ source: "income-pool", target: "savings", value: totalIncome - totalSpending });
+  }
+  if (totalSpending > totalIncome && totalSpending > 0) {
+    nodes.push({ id: "unfunded", name: "Unfunded", value: totalSpending - totalIncome, kind: "unfunded" });
+    links.push({ source: "unfunded", target: "income-pool", value: totalSpending - totalIncome });
+  }
+
+  return { nodes, links: links.filter((link) => link.value > 0.01), totalIncome, totalSpending };
+}
+
+function renderFinanceSankey() {
+  if (!financeSankeyChart) {
+    return;
+  }
+  financeSankeyChart.replaceChildren();
+
+  if (!window.d3?.sankey) {
+    const empty = document.createElement("div");
+    empty.className = "builder-empty";
+    empty.textContent = "Sankey library did not load.";
+    financeSankeyChart.append(empty);
+    return;
+  }
+
+  const model = financeSankeyModel();
+  if (!model.nodes.length || !model.links.length) {
+    const empty = document.createElement("div");
+    empty.className = "builder-empty";
+    empty.textContent = "Add income and spending rows to build an income flow.";
+    financeSankeyChart.append(empty);
+    return;
+  }
+
+  const width = Math.max(1100, financeSankeyChart.clientWidth || 1100);
+  const height = Math.max(760, 170 + model.nodes.length * 44);
+  const leftLabelGutter = Math.min(260, width * 0.22);
+  const rightLabelGutter = Math.min(300, width * 0.24);
+  const svg = d3.select(financeSankeyChart)
+    .append("svg")
+    .attr("class", "finance-sankey-svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("role", "img")
+    .attr("aria-label", "Sankey chart of income categories flowing into spending categories and savings");
+
+  const graph = d3.sankey()
+    .nodeId((node) => node.id)
+    .nodeWidth(18)
+    .nodePadding(22)
+    .extent([[leftLabelGutter, 32], [width - rightLabelGutter, height - 32]])({
+      nodes: model.nodes.map((node) => ({ ...node })),
+      links: model.links.map((link) => ({ ...link }))
+    });
+  const color = (kind) => ({
+    income: "#9ffcdf",
+    pool: "#ffffff",
+    spending: "#e9edf2",
+    savings: "#7cc7ff",
+    unfunded: "#ffb86b"
+  })[kind] || "#ffffff";
+  const labelX = (d) => (
+    d.kind === "income" || d.kind === "unfunded"
+      ? d.x0 - 14
+      : d.x1 + 14
+  );
+  const labelAnchor = (d) => (
+    d.kind === "income" || d.kind === "unfunded" ? "end" : "start"
+  );
+
+  svg.append("g")
+    .selectAll("path")
+    .data(graph.links)
+    .join("path")
+    .attr("class", "finance-sankey-link")
+    .attr("d", d3.sankeyLinkHorizontal())
+    .attr("stroke", (link) => color(link.target.kind))
+    .attr("stroke-width", (link) => Math.max(1, link.width))
+    .append("title")
+    .text((link) => `${link.source.name} to ${link.target.name}: ${money(link.value)}`);
+
+  const node = svg.append("g")
+    .selectAll("g")
+    .data(graph.nodes)
+    .join("g")
+    .attr("class", "finance-sankey-node");
+
+  node.append("rect")
+    .attr("x", (d) => d.x0)
+    .attr("y", (d) => d.y0)
+    .attr("height", (d) => Math.max(1, d.y1 - d.y0))
+    .attr("width", (d) => d.x1 - d.x0)
+    .attr("fill", (d) => color(d.kind));
+
+  node.append("text")
+    .attr("x", labelX)
+    .attr("y", (d) => (d.y0 + d.y1) / 2 - 5)
+    .attr("text-anchor", labelAnchor)
+    .text((d) => d.name);
+
+  node.append("text")
+    .attr("class", "finance-sankey-value")
+    .attr("x", labelX)
+    .attr("y", (d) => (d.y0 + d.y1) / 2 + 10)
+    .attr("text-anchor", labelAnchor)
+    .text((d) => money(d.value));
 }
 
 function sumRows(rows, predicate = () => true) {
@@ -2138,6 +2286,9 @@ function render(data) {
   renderDebt();
   renderWork();
   renderAccounting(data);
+  if (financeSankeyDialog?.open) {
+    renderFinanceSankey();
+  }
   renderPlaidSkippedTransactions();
   renderPlaidButton(plaidStatusText);
 }
@@ -2366,6 +2517,21 @@ document.querySelector("[data-open-work-sankey]").addEventListener("click", () =
 
 document.querySelector("[data-close-work-sankey]").addEventListener("click", () => {
   workSankeyDialog.close();
+});
+
+document.querySelector("[data-open-finance-sankey]").addEventListener("click", () => {
+  financeSankeyDialog.showModal();
+  requestAnimationFrame(() => renderFinanceSankey());
+});
+
+document.querySelector("[data-close-finance-sankey]").addEventListener("click", () => {
+  financeSankeyDialog.close();
+});
+
+window.addEventListener("resize", () => {
+  if (financeSankeyDialog?.open) {
+    renderFinanceSankey();
+  }
 });
 
 document.querySelector("[data-back-to-budget]").addEventListener("click", () => {

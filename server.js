@@ -7,6 +7,10 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL(".", import.meta.url));
 const envPath = join(root, ".env");
 const publicDir = join(root, "public");
+const vendorFiles = {
+  "/vendor/d3/d3.min.js": join(root, "node_modules", "d3", "dist", "d3.min.js"),
+  "/vendor/d3-sankey/d3-sankey.min.js": join(root, "node_modules", "d3-sankey", "dist", "d3-sankey.min.js")
+};
 
 function loadEnvFile() {
   if (!existsSync(envPath)) {
@@ -1694,6 +1698,18 @@ async function handleApi(request, response) {
 
 function sendStatic(request, response) {
   const requestPath = new URL(request.url, `http://${request.headers.host}`).pathname;
+  const vendorFile = vendorFiles[requestPath];
+  if (vendorFile) {
+    if (!existsSync(vendorFile)) {
+      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Not found");
+      return;
+    }
+    response.writeHead(200, { "content-type": mimeTypes[".js"] });
+    createReadStream(vendorFile).pipe(response);
+    return;
+  }
+
   const safePath = normalize(requestPath === "/" ? "/index.html" : requestPath).replace(/^(\.\.[/\\])+/, "");
   const filePath = join(publicDir, safePath);
 
