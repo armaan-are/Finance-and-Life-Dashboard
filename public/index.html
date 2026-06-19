@@ -35,7 +35,7 @@
         </span>
         <span>Debt</span>
       </a>
-      <a class="tab" href="/">
+      <a class="tab" href="#work" data-page-link="work">
         <span class="tab-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7"/>
@@ -55,9 +55,15 @@
             <button class="add-button" type="button" data-open-accounting>Accounting</button>
             <button class="add-button" type="button" data-link-bank>Link Bank</button>
             <button class="add-button" type="button" data-open-plaid-review hidden>Review Plaid</button>
+            <button class="add-button" type="button" data-open-plaid-skipped>Skipped Plaid</button>
           </div>
         </div>
         <section class="finance-summary" aria-label="Financial data">
+          <div class="summary-highlight">
+            <span>Current Budget Spending</span>
+            <strong data-current-budget-spending>0.00</strong>
+            <small data-current-budget-period>Current budget period</small>
+          </div>
           <div class="summary-totals">
             <div class="summary-metric">
               <span>Total Spending</span>
@@ -189,9 +195,45 @@
       <section class="budget-page page-view" data-page="budget" aria-labelledby="budget-title" hidden>
         <div class="budget-head">
           <h1 id="budget-title">Budget</h1>
-          <button class="add-button" type="button" data-open-budget>Add Budget</button>
+          <div class="budget-form-actions">
+            <button class="add-button" type="button" data-open-budget-builder>Budget Builder</button>
+            <button class="add-button" type="button" data-open-budget>Add Budget</button>
+          </div>
         </div>
         <div class="budgets-scroll" data-budgets-scroll aria-label="Budgets"></div>
+      </section>
+      <section class="budget-builder-page page-view" data-page="budget-builder" aria-labelledby="budget-builder-title" hidden>
+        <div class="budget-builder-head">
+          <div>
+            <h1 id="budget-builder-title">Budget Builder</h1>
+            <div class="budget-builder-subtitle">Plan cash flow across custom pay periods.</div>
+          </div>
+          <div class="budget-form-actions">
+            <button class="add-button" type="button" data-back-to-budget>Budget</button>
+            <button class="add-button" type="button" data-export-builder>Export</button>
+            <button class="add-button" type="button" data-add-builder-bucket>Add Bucket</button>
+          </div>
+        </div>
+        <div class="budget-template-row" aria-label="Budget block templates">
+          <button class="builder-template is-expense" type="button" draggable="true" data-template-type="expense">
+            <span>Spending / Expense</span>
+            <strong>Drag to bucket</strong>
+          </button>
+          <button class="builder-template is-income" type="button" draggable="true" data-template-type="income">
+            <span>Income</span>
+            <strong>Drag to bucket</strong>
+          </button>
+        </div>
+        <div class="budget-builder-overview">
+          <section class="starting-cash-card" aria-label="Starting cash balance">
+            <span>Starting Cash Balance</span>
+            <input class="ledger-input amount" type="text" inputmode="decimal" placeholder="0" data-starting-cash>
+          </section>
+          <div class="builder-summary-slot" data-builder-summary></div>
+        </div>
+        <div class="budget-builder-canvas" data-budget-builder-canvas>
+          <div class="builder-buckets" data-builder-buckets aria-label="Budget builder buckets"></div>
+        </div>
       </section>
       <section class="debt-page page-view" data-page="debt" aria-labelledby="debt-title" hidden>
         <div class="finance-head">
@@ -217,7 +259,64 @@
           </section>
         </div>
       </section>
+      <section class="work-page page-view" data-page="work" aria-labelledby="work-title" hidden>
+        <div class="finance-head">
+          <h1 id="work-title">Work</h1>
+          <div class="work-actions">
+            <input class="ledger-input work-search" type="search" placeholder="Search applications" data-work-search>
+            <button class="add-button" type="button" data-open-work-sankey>Flow</button>
+            <button class="add-button" type="button" data-add-work-application>Add</button>
+          </div>
+        </div>
+        <section class="work-summary" aria-label="Application stats">
+          <div class="summary-metric">
+            <span>Total</span>
+            <strong data-work-total>0</strong>
+          </div>
+          <div class="summary-metric">
+            <span>Active</span>
+            <strong data-work-active>0</strong>
+          </div>
+          <div class="summary-metric">
+            <span>Interviews</span>
+            <strong data-work-interviews>0</strong>
+          </div>
+          <div class="summary-metric">
+            <span>Offers</span>
+            <strong data-work-offers>0</strong>
+          </div>
+          <div class="summary-metric">
+            <span>Response Rate</span>
+            <strong data-work-response-rate>0%</strong>
+          </div>
+        </section>
+        <section class="ledger work-ledger" aria-labelledby="work-applications-title">
+          <div class="ledger-head">
+            <h2 id="work-applications-title">Applications</h2>
+            <span data-work-count-label></span>
+          </div>
+          <div class="work-table-head" aria-hidden="true">
+            <span>Company</span>
+            <span>Role</span>
+            <span>Status</span>
+            <span>Applied</span>
+            <span>Deadline</span>
+            <span>Portal</span>
+            <span>Notes</span>
+          </div>
+          <div class="ledger-list work-list" data-work-list aria-label="Application tracker"></div>
+        </section>
+      </section>
     </main>
+    <dialog class="budget-dialog sankey-dialog" data-work-sankey-dialog>
+      <form class="budget-form" method="dialog">
+        <div class="budget-dialog-head">
+          <h2>Application Flow</h2>
+          <button class="delete-row" type="button" data-close-work-sankey aria-label="Close application flow">x</button>
+        </div>
+        <div class="sankey-chart" data-work-sankey-chart></div>
+      </form>
+    </dialog>
     <dialog class="budget-dialog loan-dialog" data-loan-dialog>
       <form class="budget-form" method="dialog" data-loan-form>
         <div class="budget-dialog-head">
@@ -280,6 +379,128 @@
         <button class="add-button save-budget" type="submit" data-save-budget>Create Budget</button>
       </form>
     </dialog>
+    <dialog class="budget-dialog" data-builder-export-dialog>
+      <form class="budget-form" method="dialog">
+        <div class="budget-dialog-head">
+          <h2>Export Budget Builder</h2>
+          <button class="delete-row" type="button" data-close-builder-export aria-label="Close export">x</button>
+        </div>
+        <label class="builder-export-field">
+          <span>JSON</span>
+          <textarea class="ledger-input builder-export-json" readonly data-builder-export-json></textarea>
+        </label>
+        <div class="budget-form-actions">
+          <button class="add-button save-budget" type="button" data-copy-builder-export>Copy</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog class="budget-dialog" data-builder-bucket-dialog>
+      <form class="budget-form" method="dialog" data-builder-bucket-form>
+        <div class="budget-dialog-head">
+          <h2 data-builder-bucket-title>New Bucket</h2>
+          <button class="delete-row" type="button" data-close-builder-bucket aria-label="Close bucket form">x</button>
+        </div>
+        <div class="builder-bucket-mode" data-builder-bucket-mode>
+          <label>
+            <input type="radio" name="bucketMode" value="single" checked>
+            <span>Single bucket</span>
+          </label>
+          <label>
+            <input type="radio" name="bucketMode" value="months">
+            <span>Month range</span>
+          </label>
+        </div>
+        <div class="budget-fields" data-builder-bucket-mode-panel="single">
+          <label>
+            <span>Name</span>
+            <input class="ledger-input" name="name" type="text" placeholder="Optional">
+          </label>
+          <label>
+            <span>Start Date</span>
+            <input class="ledger-input" name="startDate" type="text" placeholder="6/15/2026">
+          </label>
+          <label>
+            <span>End Date</span>
+            <input class="ledger-input" name="endDate" type="text" placeholder="6/30/2026">
+          </label>
+        </div>
+        <div class="budget-fields builder-month-range" data-builder-bucket-mode-panel="months" hidden>
+          <label>
+            <span>First Month</span>
+            <input class="ledger-input" name="rangeStartMonth" type="month">
+          </label>
+          <label>
+            <span>Last Month</span>
+            <input class="ledger-input" name="rangeEndMonth" type="month">
+          </label>
+        </div>
+        <button class="add-button save-budget" type="submit" data-save-builder-bucket>Save Bucket</button>
+      </form>
+    </dialog>
+    <dialog class="budget-dialog" data-builder-block-dialog>
+      <form class="budget-form" method="dialog" data-builder-block-form>
+        <div class="budget-dialog-head">
+          <h2 data-builder-block-title>Budget Block</h2>
+          <button class="delete-row" type="button" data-close-builder-block aria-label="Close block form">x</button>
+        </div>
+        <div class="budget-fields builder-block-fields">
+          <label>
+            <span>Template</span>
+            <select class="ledger-select" name="template">
+              <option value="custom">Custom</option>
+              <option value="paycheck">Paycheck</option>
+              <option value="tuition">Tuition</option>
+              <option value="semester-spending">Semester Spending</option>
+              <option value="tax-refund">Tax Refund</option>
+            </select>
+          </label>
+          <label>
+            <span>Name</span>
+            <input class="ledger-input" name="name" type="text" required>
+          </label>
+          <label>
+            <span>Type</span>
+            <select class="ledger-select" name="type">
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+            </select>
+          </label>
+          <label>
+            <span>Amount</span>
+            <input class="ledger-input amount" name="amount" type="text" inputmode="decimal" placeholder="0">
+          </label>
+          <label>
+            <span>Category</span>
+            <select class="ledger-select" name="category" required></select>
+          </label>
+          <label>
+            <span>First Date</span>
+            <input class="ledger-input" name="dueDate" type="text" placeholder="6/15/2026">
+          </label>
+          <label>
+            <span>Every</span>
+            <select class="ledger-select" name="repeatRule">
+              <option value="once">One-time</option>
+              <option value="monthly">Monthly</option>
+              <option value="biweekly">Every 2 weeks</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </label>
+          <label>
+            <span>Until</span>
+            <input class="ledger-input" name="repeatEndDate" type="text" placeholder="9/1/2026">
+          </label>
+          <label class="builder-notes-field">
+            <span>Memo</span>
+            <input class="ledger-input" name="notes" type="text" placeholder="Optional">
+          </label>
+        </div>
+        <div class="budget-form-actions">
+          <button class="delete-row builder-delete-block" type="button" data-delete-builder-block aria-label="Delete block">x</button>
+          <button class="add-button save-budget" type="submit" data-save-builder-block>Save Block</button>
+        </div>
+      </form>
+    </dialog>
     <dialog class="budget-dialog confirm-dialog" data-confirm-budget-delete>
       <form class="budget-form" method="dialog">
         <div class="budget-dialog-head">
@@ -328,8 +549,19 @@
           <span>Description</span>
           <input class="ledger-input" name="description" type="text" data-plaid-description>
         </label>
-        <button class="add-button save-budget" type="submit" data-save-plaid>Save Transaction</button>
+        <div class="plaid-dialog-actions">
+          <button class="add-button plaid-skip-button" type="button" data-skip-plaid>Skip</button>
+          <button class="add-button save-budget" type="submit" data-save-plaid>Save Transaction</button>
+        </div>
       </form>
+    </dialog>
+    <dialog class="budget-dialog plaid-dialog" data-plaid-skipped-dialog>
+      <div class="budget-dialog-head">
+        <h2>Skipped Plaid Transactions</h2>
+        <button class="delete-row" type="button" data-close-plaid-skipped aria-label="Close skipped Plaid list">x</button>
+      </div>
+      <div class="plaid-imports-meta" data-plaid-skipped-count></div>
+      <div class="plaid-skipped-list" data-plaid-skipped-list></div>
     </dialog>
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
     <script src="/app.js"></script>

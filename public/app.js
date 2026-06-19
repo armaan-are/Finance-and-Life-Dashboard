@@ -47,6 +47,22 @@ const budgetCategories = document.querySelector("[data-budget-categories]");
 const budgetDialogTitle = document.querySelector("[data-budget-dialog-title]");
 const saveBudgetButton = document.querySelector("[data-save-budget]");
 const confirmBudgetDelete = document.querySelector("[data-confirm-budget-delete]");
+const builderBuckets = document.querySelector("[data-builder-buckets]");
+const builderSummary = document.querySelector("[data-builder-summary]");
+const startingCashInput = document.querySelector("[data-starting-cash]");
+const builderBucketDialog = document.querySelector("[data-builder-bucket-dialog]");
+const builderBucketForm = document.querySelector("[data-builder-bucket-form]");
+const builderBucketTitle = document.querySelector("[data-builder-bucket-title]");
+const saveBuilderBucketButton = document.querySelector("[data-save-builder-bucket]");
+const builderBucketMode = document.querySelector("[data-builder-bucket-mode]");
+const builderBucketModePanels = document.querySelectorAll("[data-builder-bucket-mode-panel]");
+const builderExportDialog = document.querySelector("[data-builder-export-dialog]");
+const builderExportJson = document.querySelector("[data-builder-export-json]");
+const copyBuilderExportButton = document.querySelector("[data-copy-builder-export]");
+const builderBlockDialog = document.querySelector("[data-builder-block-dialog]");
+const builderBlockForm = document.querySelector("[data-builder-block-form]");
+const builderBlockTitle = document.querySelector("[data-builder-block-title]");
+const deleteBuilderBlockButton = document.querySelector("[data-delete-builder-block]");
 const categoryDialog = document.querySelector("[data-category-dialog]");
 const categoryForm = document.querySelector("[data-category-form]");
 const categoryDialogTitle = document.querySelector("[data-category-dialog-title]");
@@ -57,7 +73,11 @@ const budgetsScroll = document.querySelector("[data-budgets-scroll]");
 const plaidStatus = document.querySelector("[data-plaid-status]");
 const linkBankButton = document.querySelector("[data-link-bank]");
 const plaidReviewButton = document.querySelector("[data-open-plaid-review]");
+const plaidSkippedButton = document.querySelector("[data-open-plaid-skipped]");
+const plaidSkippedCount = document.querySelector("[data-plaid-skipped-count]");
+const plaidSkippedList = document.querySelector("[data-plaid-skipped-list]");
 const plaidDialog = document.querySelector("[data-plaid-dialog]");
+const plaidSkippedDialog = document.querySelector("[data-plaid-skipped-dialog]");
 const plaidForm = document.querySelector("[data-plaid-form]");
 const plaidReviewSummary = document.querySelector("[data-plaid-review-summary]");
 const plaidLedgerSelect = document.querySelector("[data-plaid-ledger]");
@@ -68,6 +88,11 @@ const loanDialog = document.querySelector("[data-loan-dialog]");
 const loanForm = document.querySelector("[data-loan-form]");
 const totalDebt = document.querySelector("[data-total-debt]");
 const graduationDateLabel = document.querySelector("[data-graduation-date-label]");
+const workList = document.querySelector("[data-work-list]");
+const workSearch = document.querySelector("[data-work-search]");
+const workCountLabel = document.querySelector("[data-work-count-label]");
+const workSankeyDialog = document.querySelector("[data-work-sankey-dialog]");
+const workSankeyChart = document.querySelector("[data-work-sankey-chart]");
 const openAccountingButton = document.querySelector("[data-open-accounting]");
 const accountingElements = {
   equation: document.querySelector("[data-accounting-equation]"),
@@ -89,6 +114,8 @@ const accountingElements = {
   journal: document.querySelector("[data-journal-list]")
 };
 const summaryElements = {
+  currentBudgetSpending: document.querySelector("[data-current-budget-spending]"),
+  currentBudgetPeriod: document.querySelector("[data-current-budget-period]"),
   totalSpending: document.querySelector("[data-total-spending]"),
   extractedValue: document.querySelector("[data-extracted-value]"),
   totalIncome: document.querySelector("[data-total-income]"),
@@ -96,16 +123,30 @@ const summaryElements = {
   categoryBreakdown: document.querySelector("[data-category-breakdown]"),
   donutChart: document.querySelector("[data-donut-chart]")
 };
-let financeData = { spending: [], income: [], budgets: [], loans: [], graduationDate: "" };
+const defaultWorkStatuses = ["Saved", "Applied", "Screen", "Interview", "Offer", "Rejected", "Withdrawn"];
+const workSummaryElements = {
+  total: document.querySelector("[data-work-total]"),
+  active: document.querySelector("[data-work-active]"),
+  interviews: document.querySelector("[data-work-interviews]"),
+  offers: document.querySelector("[data-work-offers]"),
+  responseRate: document.querySelector("[data-work-response-rate]")
+};
+let financeData = { spending: [], income: [], budgets: [], loans: [], graduationDate: "", workApplications: [], workStatuses: defaultWorkStatuses };
 let editingBudgetId = null;
 let deletingBudgetId = null;
+let editingBuilderBucketId = null;
+let editingBuilderBlockId = null;
+let editingBuilderBlockBucketId = null;
+const expandedBuilderBlocks = new Set();
 let pendingPlaidTransactions = [];
+let skippedPlaidTransactions = [];
 let activePlaidIndex = 0;
 let plaidStatusText = "";
 let linkedPlaidItems = [];
 let plaidConfigured = false;
 let plaidSyncPromise = null;
 let categoryLedger = "spending";
+let workQuery = "";
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -236,6 +277,32 @@ function money(value) {
 
 function normalizeDateText(value, defaultYear = "2026") {
   const text = String(value || "").trim();
+  const monthNames = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12
+  };
   let match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
   if (match) {
     return `${Number(match[2])}/${Number(match[3])}/${match[1]}`;
@@ -254,6 +321,11 @@ function normalizeDateText(value, defaultYear = "2026") {
   match = text.match(/^0?(\d{1,2})\/0?(\d{1,2})$/);
   if (match) {
     return `${Number(match[1])}/${Number(match[2])}/${defaultYear}`;
+  }
+
+  match = text.match(/^([a-z]+)\s+0?(\d{1,2})(?:,?\s+(\d{4}))?$/i);
+  if (match && monthNames[match[1].toLowerCase()]) {
+    return `${monthNames[match[1].toLowerCase()]}/${Number(match[2])}/${match[3] || defaultYear}`;
   }
 
   return text;
@@ -504,6 +576,218 @@ function renderDebt() {
   graduationDateLabel.textContent = financeData.graduationDate
     ? `Graduation ${displayAppDate(financeData.graduationDate)}`
     : "No graduation date";
+}
+
+function workStatuses() {
+  return financeData.workStatuses?.length ? financeData.workStatuses : defaultWorkStatuses;
+}
+
+function workInput(row, field, value) {
+  const editor = document.createElement("input");
+  editor.className = `ledger-input ${field}`;
+  editor.type = field === "portalUrl" ? "url" : "text";
+  editor.value = value || "";
+  editor.addEventListener("blur", () => saveWorkField(row.id, field, ["appliedDate", "deadlineDate"].includes(field) ? normalizeDateText(editor.value) : editor.value));
+  editor.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      editor.blur();
+    }
+    if (event.key === "Escape") {
+      renderCurrent();
+    }
+  });
+  return editor;
+}
+
+function workStatusSelect(row) {
+  const editor = document.createElement("select");
+  editor.className = "ledger-select";
+  for (const status of workStatuses()) {
+    const option = document.createElement("option");
+    option.value = status;
+    option.textContent = status;
+    editor.append(option);
+  }
+  editor.value = workStatuses().includes(row.status) ? row.status : "Saved";
+  editor.addEventListener("change", () => saveWorkField(row.id, "status", editor.value));
+  return editor;
+}
+
+function workCell(className, child) {
+  const element = document.createElement("div");
+  element.className = `ledger-cell ${className}`;
+  element.append(child);
+  return element;
+}
+
+function workPortalCell(row) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "work-portal-cell";
+  wrapper.append(workInput(row, "portalUrl", row.portalUrl));
+  if (row.portalUrl) {
+    const link = document.createElement("a");
+    link.href = row.portalUrl;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.textContent = "Open";
+    wrapper.append(link);
+  }
+  return workCell("portal", wrapper);
+}
+
+function workDeleteButton(row) {
+  const button = document.createElement("button");
+  button.className = "delete-row";
+  button.type = "button";
+  button.textContent = "x";
+  button.setAttribute("aria-label", "Delete application row");
+  button.addEventListener("click", async () => {
+    await api(`/api/work/applications/${row.id}`, { method: "DELETE" });
+    renderCurrent();
+  });
+  return button;
+}
+
+async function saveWorkField(id, field, value) {
+  await api(`/api/work/applications/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ [field]: value })
+  });
+  renderCurrent();
+}
+
+function searchableWorkText(row) {
+  return [
+    row.company,
+    row.role,
+    row.status,
+    row.appliedDate,
+    row.deadlineDate,
+    row.portalUrl,
+    row.notes
+  ].join(" ").toLowerCase();
+}
+
+function filteredWorkApplications() {
+  const query = workQuery.trim().toLowerCase();
+  const rows = financeData.workApplications || [];
+  if (!query) {
+    return rows;
+  }
+  return rows.filter((row) => searchableWorkText(row).includes(query));
+}
+
+function renderWorkSummary(rows) {
+  const total = rows.length;
+  const active = rows.filter((row) => !["Offer", "Rejected", "Withdrawn"].includes(row.status)).length;
+  const interviews = rows.filter((row) => ["Interview", "Offer"].includes(row.status)).length;
+  const offers = rows.filter((row) => row.status === "Offer").length;
+  const responses = rows.filter((row) => ["Screen", "Interview", "Offer", "Rejected"].includes(row.status)).length;
+  const applied = rows.filter((row) => row.status !== "Saved").length;
+
+  workSummaryElements.total.textContent = String(total);
+  workSummaryElements.active.textContent = String(active);
+  workSummaryElements.interviews.textContent = String(interviews);
+  workSummaryElements.offers.textContent = String(offers);
+  workSummaryElements.responseRate.textContent = applied ? `${Math.round((responses / applied) * 100)}%` : "0%";
+  workCountLabel.textContent = workQuery ? `${rows.length} matching` : `${total} tracked`;
+}
+
+function renderWork() {
+  const rows = filteredWorkApplications();
+  renderWorkSummary(rows);
+  workList.replaceChildren(
+    ...rows.map((row) => {
+      const element = document.createElement("div");
+      element.className = "ledger-row work-row";
+      element.append(workCell("company", workInput(row, "company", row.company)));
+      element.append(workCell("role", workInput(row, "role", row.role)));
+      element.append(workCell("status", workStatusSelect(row)));
+      element.append(workCell("date", workInput(row, "appliedDate", row.appliedDate)));
+      element.append(workCell("date", workInput(row, "deadlineDate", row.deadlineDate)));
+      element.append(workPortalCell(row));
+      element.append(workCell("notes", workInput(row, "notes", row.notes)));
+      element.append(workDeleteButton(row));
+      return element;
+    })
+  );
+}
+
+function workFlowLinks(rows) {
+  const links = new Map();
+  for (const row of rows) {
+    const history = [...(row.history || [])].sort((a, b) => a.id - b.id);
+    const statuses = history.map((entry) => entry.status).filter(Boolean);
+    if (!statuses.length && row.status) {
+      statuses.push(row.status);
+    }
+    for (let index = 0; index < statuses.length - 1; index += 1) {
+      const source = statuses[index];
+      const target = statuses[index + 1];
+      if (source === target) {
+        continue;
+      }
+      const key = `${source}->${target}`;
+      links.set(key, {
+        source,
+        target,
+        count: (links.get(key)?.count || 0) + 1
+      });
+    }
+    if (statuses.length === 1) {
+      const key = `Start->${statuses[0]}`;
+      links.set(key, {
+        source: "Start",
+        target: statuses[0],
+        count: (links.get(key)?.count || 0) + 1
+      });
+    }
+  }
+  return [...links.values()];
+}
+
+function renderWorkSankey() {
+  const rows = financeData.workApplications || [];
+  const links = workFlowLinks(rows);
+  if (!links.length) {
+    workSankeyChart.replaceChildren();
+    const empty = document.createElement("div");
+    empty.className = "builder-empty";
+    empty.textContent = "Add applications and change statuses to build a flow.";
+    workSankeyChart.append(empty);
+    return;
+  }
+
+  const columns = ["Start", ...workStatuses()];
+  const maxCount = Math.max(...links.map((link) => link.count), 1);
+  workSankeyChart.replaceChildren(
+    ...columns.map((status) => {
+      const incoming = links.filter((link) => link.target === status).reduce((total, link) => total + link.count, 0);
+      const outgoing = links.filter((link) => link.source === status).reduce((total, link) => total + link.count, 0);
+      const total = Math.max(incoming, outgoing);
+      const column = document.createElement("div");
+      column.className = "sankey-column";
+      const node = document.createElement("div");
+      node.className = "sankey-node";
+      node.style.minHeight = `${34 + (total / maxCount) * 70}px`;
+      node.append(document.createElement("strong"));
+      node.append(document.createElement("span"));
+      node.children[0].textContent = status;
+      node.children[1].textContent = `${total} application${total === 1 ? "" : "s"}`;
+      column.append(node);
+
+      const outgoingLinks = links.filter((link) => link.source === status);
+      for (const link of outgoingLinks) {
+        const band = document.createElement("div");
+        band.className = "sankey-band";
+        band.style.height = `${Math.max(10, (link.count / maxCount) * 42)}px`;
+        band.textContent = `${link.count} to ${link.target}`;
+        column.append(band);
+      }
+
+      return column;
+    })
+  );
 }
 
 function sumRows(rows, predicate = () => true) {
@@ -1054,6 +1338,10 @@ function budgetIsCurrent(budget, today = new Date()) {
   return start !== null || end !== null;
 }
 
+function currentBudgetForToday(budgets, today = new Date()) {
+  return sortedBudgetsForDisplay(budgets).find((budget) => budgetIsCurrent(budget, today)) || null;
+}
+
 function sortedBudgetsForDisplay(budgets) {
   const today = new Date();
   return [...budgets].sort((a, b) => {
@@ -1116,6 +1404,645 @@ function renderBudgets() {
   );
 }
 
+function budgetBuilderSortTime(bucket) {
+  return parseDateValue(bucket.startDate) || parseDateValue(bucket.endDate) || 0;
+}
+
+function sortedBuilderBuckets() {
+  return [...(financeData.budgetBuilder?.buckets || [])].sort((a, b) => (
+    budgetBuilderSortTime(a) - budgetBuilderSortTime(b) || a.id - b.id
+  ));
+}
+
+function builderBlockTotals(blocks) {
+  return blocks.reduce((totals, block) => {
+    const amount = numberValue(block.amount);
+    if (block.type === "income") {
+      totals.income += amount;
+    } else {
+      totals.expenses += amount;
+    }
+    return totals;
+  }, { income: 0, expenses: 0 });
+}
+
+const builderRepeatLabels = {
+  once: "One-time",
+  monthly: "Monthly",
+  biweekly: "Every 2 weeks",
+  weekly: "Weekly"
+};
+
+function builderLedgerForType(type) {
+  return type === "income" ? "income" : "spending";
+}
+
+function updateBuilderCategoryOptions(type, selected = "") {
+  const categorySelect = builderBlockForm.elements.category;
+  const categories = categoriesForLedger(builderLedgerForType(type)).filter((category) => category !== "All Spending");
+  categorySelect.replaceChildren(
+    ...categories.map((category) => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = category;
+      return option;
+    })
+  );
+  categorySelect.value = categories.includes(selected) ? selected : "Set Category";
+}
+
+const builderBlockTemplates = {
+  paycheck: {
+    name: "Paycheck",
+    type: "income",
+    category: "Work Income",
+    repeatRule: "biweekly"
+  },
+  tuition: {
+    name: "Tuition",
+    type: "expense",
+    category: "Tuition",
+    repeatRule: "once"
+  },
+  "semester-spending": {
+    name: "Semester Spending",
+    type: "expense",
+    category: "Educational",
+    repeatRule: "biweekly"
+  },
+  "tax-refund": {
+    name: "Tax Refund",
+    type: "income",
+    category: "Tax Return",
+    repeatRule: "once"
+  }
+};
+
+function applyBuilderBlockTemplate(templateId) {
+  const template = builderBlockTemplates[templateId];
+  if (!template) {
+    return;
+  }
+  builderBlockForm.elements.name.value = template.name;
+  builderBlockForm.elements.type.value = template.type;
+  updateBuilderCategoryOptions(template.type, template.category);
+  builderBlockForm.elements.repeatRule.value = template.repeatRule;
+  if (template.repeatRule === "once") {
+    builderBlockForm.elements.repeatEndDate.value = "";
+  }
+}
+
+function appDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function compareAppDates(a, b) {
+  return appDateKey(a).localeCompare(appDateKey(b));
+}
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date, months, preferredDay = date.getDate()) {
+  const next = new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(preferredDay, lastDay));
+  return next;
+}
+
+function nextBuilderRepeatDate(date, repeatRule, preferredDay) {
+  if (repeatRule === "weekly") {
+    return addDays(date, 7);
+  }
+  if (repeatRule === "biweekly") {
+    return addDays(date, 14);
+  }
+  if (repeatRule === "monthly") {
+    return addMonths(date, 1, preferredDay);
+  }
+  return null;
+}
+
+function bucketDateRange(bucket) {
+  const start = parseAppDate(bucket.startDate) || parseAppDate(bucket.endDate);
+  const end = parseAppDate(bucket.endDate) || parseAppDate(bucket.startDate);
+  return { start, end };
+}
+
+function bucketContainsDate(bucket, date) {
+  const { start, end } = bucketDateRange(bucket);
+  if (!date || !start || !end) {
+    return false;
+  }
+  return compareAppDates(date, start) >= 0 && compareAppDates(date, end) <= 0;
+}
+
+function findBuilderBucketForDate(buckets, date) {
+  return buckets.find((bucket) => bucketContainsDate(bucket, date)) || null;
+}
+
+function builderTimelineBounds(buckets) {
+  const dates = buckets.flatMap((bucket) => [parseAppDate(bucket.startDate), parseAppDate(bucket.endDate)]).filter(Boolean);
+  if (!dates.length) {
+    return { start: null, end: null };
+  }
+  return {
+    start: dates.reduce((earliest, date) => (compareAppDates(date, earliest) < 0 ? date : earliest), dates[0]),
+    end: dates.reduce((latest, date) => (compareAppDates(date, latest) > 0 ? date : latest), dates[0])
+  };
+}
+
+function emptyBuilderTotals() {
+  return { income: 0, expenses: 0, events: [] };
+}
+
+function addBuilderOccurrence(bucketTotals, bucketId, occurrence) {
+  if (!bucketTotals.has(bucketId)) {
+    bucketTotals.set(bucketId, emptyBuilderTotals());
+  }
+  const totals = bucketTotals.get(bucketId);
+  if (occurrence.type === "income") {
+    totals.income += occurrence.amount;
+  } else {
+    totals.expenses += occurrence.amount;
+  }
+  totals.events.push(occurrence);
+}
+
+function builderOccurrenceElement(occurrence) {
+  const row = document.createElement("div");
+  row.className = `builder-scheduled-event is-${occurrence.type === "income" ? "income" : "expense"}`;
+  row.append(document.createElement("span"));
+  row.append(document.createElement("strong"));
+  row.append(document.createElement("em"));
+  row.children[0].textContent = occurrence.name || (occurrence.type === "income" ? "Income" : "Expense");
+  row.children[1].textContent = `${occurrence.type === "income" ? "+" : "-"}${money(occurrence.amount)}`;
+  row.children[2].textContent = [
+    occurrence.date ? displayAppDate(`${occurrence.date.getMonth() + 1}/${occurrence.date.getDate()}/${occurrence.date.getFullYear()}`) : "",
+    builderRepeatLabels[occurrence.repeatRule] || ""
+  ].filter(Boolean).join(" · ");
+  return row;
+}
+
+function groupBuilderOccurrences(events) {
+  return events.reduce((groups, event) => {
+    const key = event.sourceBlockId || `event-${groups.size}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(event);
+    return groups;
+  }, new Map());
+}
+
+function builderScheduleSummary(events, type) {
+  const total = events.reduce((sum, event) => sum + event.amount, 0);
+  const dates = events.map((event) => event.date).filter(Boolean).sort(compareAppDates);
+  const firstDate = dates[0];
+  const lastDate = dates[dates.length - 1];
+  const sign = type === "income" ? "+" : "-";
+  return {
+    total,
+    count: events.length,
+    amountText: `${sign}${money(total)}`,
+    dateText: firstDate && lastDate
+      ? `${displayAppDate(`${firstDate.getMonth() + 1}/${firstDate.getDate()}/${firstDate.getFullYear()}`)} - ${displayAppDate(`${lastDate.getMonth() + 1}/${lastDate.getDate()}/${lastDate.getFullYear()}`)}`
+      : ""
+  };
+}
+
+function buildBuilderSchedule(buckets) {
+  const bucketTotals = new Map(buckets.map((bucket) => [bucket.id, emptyBuilderTotals()]));
+  const { start: timelineStart, end: timelineEnd } = builderTimelineBounds(buckets);
+
+  for (const bucket of buckets) {
+    for (const block of bucket.blocks || []) {
+      const type = block.type === "income" ? "income" : "expense";
+      const amount = numberValue(block.amount);
+      const repeatRule = ["monthly", "biweekly", "weekly"].includes(block.repeatRule) ? block.repeatRule : "once";
+      const blockDate = parseAppDate(block.dueDate) || parseAppDate(bucket.endDate) || parseAppDate(bucket.startDate);
+      const repeatEndDate = parseAppDate(block.repeatEndDate);
+      const scheduleEnd = repeatRule === "once" || !repeatEndDate || compareAppDates(repeatEndDate, timelineEnd) > 0
+        ? timelineEnd
+        : repeatEndDate;
+
+      if (!blockDate || !timelineStart || !scheduleEnd) {
+        addBuilderOccurrence(bucketTotals, bucket.id, { ...block, amount, type, date: null, repeatRule, sourceBucketId: bucket.id });
+        continue;
+      }
+
+      let occurrenceDate = new Date(blockDate);
+      const preferredDay = occurrenceDate.getDate();
+      let guard = 0;
+
+      while (repeatRule !== "once" && compareAppDates(occurrenceDate, timelineStart) < 0 && guard < 240) {
+        occurrenceDate = nextBuilderRepeatDate(occurrenceDate, repeatRule, preferredDay);
+        guard += 1;
+      }
+
+      while (compareAppDates(occurrenceDate, scheduleEnd) <= 0 && guard < 240) {
+        if (compareAppDates(occurrenceDate, timelineStart) >= 0) {
+          const targetBucket = findBuilderBucketForDate(buckets, occurrenceDate);
+          if (targetBucket) {
+            addBuilderOccurrence(bucketTotals, targetBucket.id, {
+              ...block,
+              amount,
+              type,
+              date: new Date(occurrenceDate),
+              repeatRule,
+              sourceBlockId: block.id,
+              sourceBucketId: bucket.id
+            });
+          }
+        }
+        if (repeatRule === "once") {
+          break;
+        }
+        occurrenceDate = nextBuilderRepeatDate(occurrenceDate, repeatRule, preferredDay);
+        guard += 1;
+      }
+    }
+  }
+
+  return bucketTotals;
+}
+
+function selectedBuilderBucketMode() {
+  return builderBucketForm.elements.bucketMode?.value || "single";
+}
+
+function setBuilderBucketMode(mode) {
+  const activeMode = mode === "months" ? "months" : "single";
+  for (const panel of builderBucketModePanels) {
+    panel.hidden = panel.dataset.builderBucketModePanel !== activeMode;
+  }
+  saveBuilderBucketButton.textContent = activeMode === "months" ? "Create Month Buckets" : (editingBuilderBucketId ? "Save Bucket" : "Create Bucket");
+}
+
+function parseMonthInput(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  return new Date(Number(match[1]), Number(match[2]) - 1, 1);
+}
+
+function monthInputValue(date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${date.getFullYear()}-${month}`;
+}
+
+function monthName(date) {
+  return date.toLocaleString("en-US", { month: "long", year: "numeric" });
+}
+
+function monthDateText(date, day) {
+  return `${date.getMonth() + 1}/${day}/${date.getFullYear()}`;
+}
+
+function monthRangeBuckets(startValue, endValue) {
+  const start = parseMonthInput(startValue);
+  const end = parseMonthInput(endValue);
+  if (!start || !end) {
+    throw new Error("Choose a first and last month.");
+  }
+  if (start > end) {
+    throw new Error("First month must come before last month.");
+  }
+
+  const buckets = [];
+  const current = new Date(start);
+  while (current <= end) {
+    const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+    buckets.push({
+      name: monthName(current),
+      startDate: monthDateText(current, 1),
+      endDate: monthDateText(current, monthEnd.getDate())
+    });
+    current.setMonth(current.getMonth() + 1);
+  }
+  return buckets;
+}
+
+function builderExportText() {
+  return JSON.stringify(financeData.budgetBuilder || { startingCash: "", buckets: [] }, null, 2);
+}
+
+async function copyTextFromField(field) {
+  field.focus();
+  field.select();
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(field.value);
+    return;
+  }
+  document.execCommand("copy");
+}
+
+function openBuilderBucketForm(bucket = null) {
+  editingBuilderBucketId = bucket?.id || null;
+  builderBucketForm.reset();
+  builderBucketTitle.textContent = bucket ? "Edit Bucket" : "New Bucket";
+  builderBucketMode.hidden = Boolean(bucket);
+  builderBucketForm.elements.bucketMode.value = "single";
+  const nextMonth = new Date();
+  builderBucketForm.elements.rangeStartMonth.value = monthInputValue(nextMonth);
+  builderBucketForm.elements.rangeEndMonth.value = monthInputValue(nextMonth);
+  setBuilderBucketMode("single");
+  builderBucketForm.elements.name.value = bucket?.name || "";
+  builderBucketForm.elements.startDate.value = bucket?.startDate || "";
+  builderBucketForm.elements.endDate.value = bucket?.endDate || "";
+  builderBucketDialog.showModal();
+}
+
+function openBuilderBlockForm(block, bucketId) {
+  editingBuilderBlockId = block?.id || null;
+  editingBuilderBlockBucketId = bucketId;
+  const type = block?.type === "income" ? "income" : "expense";
+  builderBlockForm.reset();
+  builderBlockTitle.textContent = block ? "Edit Block" : (type === "income" ? "New Income" : "New Expense");
+  builderBlockForm.elements.template.value = "custom";
+  builderBlockForm.elements.name.value = block?.name || (type === "income" ? "Income" : "Expense");
+  builderBlockForm.elements.type.value = type;
+  builderBlockForm.elements.amount.value = block?.amount || "";
+  updateBuilderCategoryOptions(type, block?.category || "Set Category");
+  builderBlockForm.elements.dueDate.value = block?.dueDate || "";
+  builderBlockForm.elements.repeatRule.value = block?.repeatRule || "once";
+  builderBlockForm.elements.repeatEndDate.value = block?.repeatEndDate || "";
+  builderBlockForm.elements.notes.value = block?.notes || "";
+  deleteBuilderBlockButton.hidden = !block;
+  builderBlockDialog.showModal();
+}
+
+async function createBuilderBlock(bucketId, type) {
+  await api("/api/budget-builder/blocks", {
+    method: "POST",
+    body: JSON.stringify({
+      bucketId,
+      type,
+      name: type === "income" ? "Income" : "Expense",
+      amount: ""
+    })
+  });
+  await renderCurrent();
+}
+
+function builderBucketDropZone(bucket) {
+  const zone = document.createElement("div");
+  zone.className = "builder-drop-zone";
+  zone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    zone.classList.add("is-drag-over");
+  });
+  zone.addEventListener("dragleave", () => {
+    zone.classList.remove("is-drag-over");
+  });
+  zone.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    zone.classList.remove("is-drag-over");
+    const templateType = event.dataTransfer.getData("application/x-budget-template");
+    const blockId = event.dataTransfer.getData("application/x-budget-block");
+
+    if (templateType) {
+      await createBuilderBlock(bucket.id, templateType === "income" ? "income" : "expense");
+      return;
+    }
+    if (blockId) {
+      await api(`/api/budget-builder/blocks/${blockId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ bucketId: bucket.id })
+      });
+      await renderCurrent();
+    }
+  });
+  return zone;
+}
+
+function builderBlockElement(block, bucketId, scheduledEvents = []) {
+  const repeatRule = block.repeatRule && block.repeatRule !== "once" ? block.repeatRule : "once";
+  const isRepeating = repeatRule !== "once";
+  const expanded = expandedBuilderBlocks.has(block.id);
+  const summary = isRepeating ? builderScheduleSummary(scheduledEvents, block.type === "income" ? "income" : "expense") : null;
+  const button = document.createElement("button");
+  button.className = `builder-block is-${block.type === "income" ? "income" : "expense"}${isRepeating ? " is-repeating" : ""}`;
+  button.type = "button";
+  button.draggable = true;
+  button.append(document.createElement("span"));
+  button.append(document.createElement("strong"));
+  button.append(document.createElement("em"));
+  if (isRepeating) {
+    button.append(document.createElement("small"));
+  }
+  button.children[0].textContent = block.name || (block.type === "income" ? "Income" : "Expense");
+  button.children[1].textContent = summary?.amountText || `${block.type === "income" ? "+" : "-"}${money(numberValue(block.amount))}`;
+  button.children[2].textContent = [
+    block.category || "No category",
+    isRepeating ? `${summary?.count || 0} payments` : (block.dueDate ? `Due ${block.dueDate}` : ""),
+    isRepeating ? builderRepeatLabels[repeatRule] : "",
+    isRepeating && summary?.dateText ? summary.dateText : ""
+  ].filter(Boolean).join(" · ");
+  if (isRepeating) {
+    button.children[3].textContent = expanded ? "Schedule expanded" : "Schedule collapsed";
+  }
+  button.addEventListener("click", () => openBuilderBlockForm(block, bucketId));
+  button.addEventListener("dragstart", (event) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-budget-block", String(block.id));
+  });
+  return button;
+}
+
+function builderScheduleToggle(block, events) {
+  const expanded = expandedBuilderBlocks.has(block.id);
+  const button = document.createElement("button");
+  button.className = "builder-repeat-toggle";
+  button.type = "button";
+  button.textContent = expanded ? "Collapse schedule" : `Show ${events.length} dates`;
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (expanded) {
+      expandedBuilderBlocks.delete(block.id);
+    } else {
+      expandedBuilderBlocks.add(block.id);
+    }
+    renderBudgetBuilder();
+  });
+  return button;
+}
+
+function builderMetric(label, value, className = "") {
+  const item = document.createElement("div");
+  item.className = `builder-metric ${className}`.trim();
+  item.append(document.createElement("span"));
+  item.append(document.createElement("strong"));
+  item.children[0].textContent = label;
+  item.children[1].textContent = money(value);
+  return item;
+}
+
+function builderBucketCashProjection(openingCash, totals, bucket) {
+  let cash = openingCash;
+  let lowestCash = openingCash;
+  let lowestDate = bucket.startDate || bucket.endDate || "";
+  const datedEvents = [...totals.events].sort((a, b) => {
+    if (!a.date && !b.date) {
+      return 0;
+    }
+    if (!a.date) {
+      return 1;
+    }
+    if (!b.date) {
+      return -1;
+    }
+    return compareAppDates(a.date, b.date) || (a.type === "income" ? -1 : 1);
+  });
+
+  for (const event of datedEvents) {
+    cash += event.type === "income" ? event.amount : -event.amount;
+    if (cash < lowestCash) {
+      lowestCash = cash;
+      lowestDate = event.date ? displayAppDate(`${event.date.getMonth() + 1}/${event.date.getDate()}/${event.date.getFullYear()}`) : bucket.endDate || lowestDate;
+    }
+  }
+
+  return {
+    cashAtEnd: cash,
+    lowestCash,
+    lowestDate
+  };
+}
+
+function builderFinalSummary(cashAtEnd, endDate, lowestCash, lowestDate) {
+  const balanced = lowestCash > 0;
+  const summary = document.createElement("aside");
+  summary.className = `builder-final-summary ${balanced ? "is-balanced" : "is-unbalanced"}`;
+  summary.append(document.createElement("span"));
+  summary.append(document.createElement("strong"));
+  summary.append(document.createElement("em"));
+  summary.append(document.createElement("b"));
+  summary.append(document.createElement("small"));
+  summary.children[0].textContent = "Cash at End";
+  summary.children[1].textContent = money(cashAtEnd);
+  summary.children[2].textContent = endDate || "End date";
+  summary.children[3].textContent = balanced ? "✓" : "×";
+  summary.children[3].setAttribute("aria-label", balanced ? "Budget balanced" : "Budget not balanced");
+  summary.children[4].textContent = `Lowest ${money(lowestCash)}${lowestDate ? ` on ${lowestDate}` : ""}`;
+  return summary;
+}
+
+function renderBudgetBuilder() {
+  const builder = financeData.budgetBuilder || { startingCash: "", buckets: [] };
+  const buckets = sortedBuilderBuckets();
+  const scheduledTotals = buildBuilderSchedule(buckets);
+  let reserve = numberValue(builder.startingCash);
+  let finalEndDate = "";
+  let builderLowestCash = reserve;
+  let builderLowestDate = "";
+
+  if (startingCashInput.value !== builder.startingCash) {
+    startingCashInput.value = builder.startingCash || "";
+  }
+
+  const bucketElements = buckets.map((bucket) => {
+    const blocks = bucket.blocks || [];
+    const totals = scheduledTotals.get(bucket.id) || emptyBuilderTotals();
+    const amountToSpend = reserve;
+    const projection = builderBucketCashProjection(amountToSpend, totals, bucket);
+    const cashAtEnd = projection.cashAtEnd;
+    const overspent = projection.lowestCash <= 0;
+    reserve = cashAtEnd;
+    finalEndDate = bucket.endDate || bucket.startDate || finalEndDate;
+    if (projection.lowestCash < builderLowestCash) {
+      builderLowestCash = projection.lowestCash;
+      builderLowestDate = projection.lowestDate;
+    }
+
+    const article = document.createElement("article");
+    article.className = `builder-bucket${overspent || cashAtEnd < 0 ? " is-negative" : ""}`;
+
+    const head = document.createElement("div");
+    head.className = "builder-bucket-head";
+    const title = document.createElement("div");
+    title.append(document.createElement("strong"));
+    title.append(document.createElement("span"));
+    title.children[0].textContent = bucket.name || "Pay Period";
+    title.children[1].textContent = `${bucket.startDate || "Start"} - ${bucket.endDate || "End"}`;
+    const actions = document.createElement("div");
+    actions.className = "builder-bucket-actions";
+    const editButton = document.createElement("button");
+    editButton.className = "add-button";
+    editButton.type = "button";
+    editButton.textContent = "Edit";
+    editButton.addEventListener("click", () => openBuilderBucketForm(bucket));
+    const deleteButtonElement = document.createElement("button");
+    deleteButtonElement.className = "delete-row";
+    deleteButtonElement.type = "button";
+    deleteButtonElement.textContent = "x";
+    deleteButtonElement.setAttribute("aria-label", "Delete bucket");
+    deleteButtonElement.addEventListener("click", async () => {
+      if (window.confirm("Delete this bucket and its blocks?")) {
+        await api(`/api/budget-builder/buckets/${bucket.id}`, { method: "DELETE" });
+        await renderCurrent();
+      }
+    });
+    actions.append(editButton);
+    actions.append(deleteButtonElement);
+    head.append(title);
+    head.append(actions);
+
+    const metrics = document.createElement("div");
+    metrics.className = "builder-metrics";
+    metrics.append(builderMetric("Amount to Spend", amountToSpend, overspent ? "is-warning" : ""));
+    metrics.append(builderMetric("Cash at End", cashAtEnd, cashAtEnd < 0 ? "is-warning" : ""));
+    metrics.append(builderMetric("Lowest Cash", projection.lowestCash, projection.lowestCash <= 0 ? "is-warning" : ""));
+    metrics.append(builderMetric("Income", totals.income, "is-income"));
+    metrics.append(builderMetric("Spending", totals.expenses, overspent ? "is-expense is-warning" : "is-expense"));
+
+    const zone = builderBucketDropZone(bucket);
+    const eventsByBlock = groupBuilderOccurrences(totals.events.filter((event) => event.sourceBlockId));
+    if (blocks.length) {
+      for (const block of blocks) {
+        const blockEvents = eventsByBlock.get(block.id) || [];
+        zone.append(builderBlockElement(block, bucket.id, blockEvents));
+        if (block.repeatRule && block.repeatRule !== "once" && blockEvents.length) {
+          zone.append(builderScheduleToggle(block, blockEvents));
+          if (expandedBuilderBlocks.has(block.id)) {
+            zone.append(...blockEvents.map((event) => builderOccurrenceElement(event)));
+          }
+        }
+      }
+    }
+    const scheduledEvents = totals.events.filter((event) => event.sourceBucketId !== bucket.id);
+    if (scheduledEvents.length) {
+      zone.append(...scheduledEvents.map((event) => builderOccurrenceElement(event)));
+    }
+    if (!blocks.length && !scheduledEvents.length) {
+      const empty = document.createElement("div");
+      empty.className = "builder-empty";
+      empty.textContent = "Drag income or expenses here";
+      zone.append(empty);
+    }
+
+    article.append(head);
+    article.append(metrics);
+    article.append(zone);
+    return article;
+  });
+
+  builderBuckets.replaceChildren(...bucketElements);
+  builderSummary.replaceChildren(...(buckets.length ? [builderFinalSummary(reserve, finalEndDate, builderLowestCash, builderLowestDate)] : []));
+
+  if (!buckets.length) {
+    const empty = document.createElement("div");
+    empty.className = "builder-empty-board";
+    empty.textContent = "Add a bucket, then drag income or expenses into it.";
+    builderBuckets.append(empty);
+  }
+}
+
 function renderCategoryBreakdown(categoryTotals) {
   const sortedCategories = ledgerConfig.spending.categories
     .filter((category) => category !== "Set Category")
@@ -1129,7 +2056,7 @@ function renderCategoryBreakdown(categoryTotals) {
         row.append(document.createElement("span"));
         row.append(document.createElement("strong"));
         row.children[0].textContent = category;
-        row.children[1].textContent = formatNumber(categoryTotals[category] || 0);
+        row.children[1].textContent = money(categoryTotals[category] || 0);
         return row;
       })
   );
@@ -1172,11 +2099,23 @@ function renderSummary(data) {
   }, 0);
   const totalIncome = data.income.reduce((total, row) => total + numberValue(row.amount), 0);
   const gdpContribution = totalSpending + extractedValue;
+  const currentBudget = currentBudgetForToday(data.budgets || []);
+  const currentBudgetSpending = currentBudget
+    ? data.spending.reduce((total, row) => (
+      inDateRange(row.date, currentBudget.startDate, currentBudget.endDate)
+        ? total + numberValue(row.amount)
+        : total
+    ), 0)
+    : 0;
 
-  summaryElements.totalSpending.textContent = formatNumber(totalSpending);
-  summaryElements.extractedValue.textContent = formatNumber(extractedValue);
-  summaryElements.totalIncome.textContent = formatNumber(totalIncome);
-  summaryElements.gdpContribution.textContent = formatNumber(gdpContribution);
+  summaryElements.currentBudgetPeriod.textContent = currentBudget
+    ? `${currentBudget.startDate || "Start"} - ${currentBudget.endDate || "End"}`
+    : "No current budget";
+  summaryElements.currentBudgetSpending.textContent = money(currentBudgetSpending);
+  summaryElements.totalSpending.textContent = money(totalSpending);
+  summaryElements.extractedValue.textContent = money(extractedValue);
+  summaryElements.totalIncome.textContent = money(totalIncome);
+  summaryElements.gdpContribution.textContent = money(gdpContribution);
   renderCategoryBreakdown(categoryTotals);
   renderDonut(
     Object.fromEntries(Object.entries(categoryTotals).filter(([category]) => category !== "Extracted Value")),
@@ -1188,14 +2127,18 @@ function render(data) {
   financeData = { ...financeData, ...data };
   updateLedgerCategories(data.categories);
   pendingPlaidTransactions = data.plaidTransactions || pendingPlaidTransactions || [];
+  skippedPlaidTransactions = data.plaidSkippedTransactions || skippedPlaidTransactions || [];
   linkedPlaidItems = data.plaidItems || linkedPlaidItems || [];
   plaidConfigured = Boolean(data.plaidConfigured);
   renderSummary(data);
   renderLedger("spending", data.spending);
   renderLedger("income", data.income);
   renderBudgets();
+  renderBudgetBuilder();
   renderDebt();
+  renderWork();
   renderAccounting(data);
+  renderPlaidSkippedTransactions();
   renderPlaidButton(plaidStatusText);
 }
 
@@ -1215,6 +2158,59 @@ function renderPlaidButton(statusText = "") {
   );
 }
 
+function renderPlaidSkippedTransactions() {
+  const count = skippedPlaidTransactions.length;
+  plaidSkippedButton.textContent = count
+    ? `Skipped Plaid (${count})`
+    : "Skipped Plaid";
+  plaidSkippedCount.textContent = count
+    ? `${count} skipped transaction${count === 1 ? "" : "s"}`
+    : "No skipped transactions";
+
+  plaidSkippedList.replaceChildren(
+    ...(count ? skippedPlaidTransactions : []).map((transaction) => {
+      const row = document.createElement("div");
+      row.className = "plaid-skip-row";
+
+      const body = document.createElement("div");
+      body.className = "plaid-skip-body";
+
+      const title = document.createElement("strong");
+      title.textContent = transaction.merchantName || transaction.name || "Plaid transaction";
+
+      const meta = document.createElement("span");
+      meta.textContent = [
+        displayPlaidDate(transaction.date),
+        `$${transaction.amount}`,
+        transaction.suggestedLedger ? transaction.suggestedLedger : ""
+      ].filter(Boolean).join(" · ");
+
+      body.append(title, meta);
+
+      const button = document.createElement("button");
+      button.className = "add-button plaid-restore-button";
+      button.type = "button";
+      button.textContent = "Add back";
+      button.addEventListener("click", async () => {
+        const result = await api(`/api/plaid/transactions/${transaction.id}/unskip`, { method: "POST" });
+        pendingPlaidTransactions = result.pending || [];
+        skippedPlaidTransactions = result.skipped || [];
+        render(await api("/api/finance"));
+      });
+
+      row.append(body, button);
+      return row;
+    })
+  );
+
+  if (!count) {
+    const empty = document.createElement("div");
+    empty.className = "plaid-skip-empty";
+    empty.textContent = "Skipped Plaid transactions will appear here.";
+    plaidSkippedList.append(empty);
+  }
+}
+
 async function syncPlaidTransactions() {
   if (plaidSyncPromise) {
     return plaidSyncPromise;
@@ -1224,6 +2220,7 @@ async function syncPlaidTransactions() {
   plaidSyncPromise = api("/api/plaid/transactions/sync", { method: "POST" })
     .then((result) => {
       pendingPlaidTransactions = result.pending || [];
+      skippedPlaidTransactions = result.skipped || skippedPlaidTransactions;
       linkedPlaidItems = result.linkedItems || linkedPlaidItems;
       if (!result.configured) {
         plaidStatusText = "Plaid not configured";
@@ -1317,10 +2314,25 @@ function showPage(page) {
   }
 }
 
+function pageFromHash() {
+  return location.hash === "#budget"
+    ? "budget"
+    : location.hash === "#budget-builder"
+      ? "budget-builder"
+      : location.hash === "#debt"
+        ? "debt"
+        : location.hash === "#work"
+          ? "work"
+          : location.hash === "#accounting"
+            ? "accounting"
+            : "finance";
+}
+
 for (const link of pageLinks) {
   link.addEventListener("click", (event) => {
     event.preventDefault();
     showPage(link.dataset.pageLink);
+    location.hash = link.dataset.pageLink === "finance" ? "" : `#${link.dataset.pageLink}`;
     if (link.dataset.pageLink === "finance") {
       renderCurrent({ syncPlaid: true });
     }
@@ -1332,7 +2344,171 @@ openAccountingButton.addEventListener("click", () => {
   location.hash = "#accounting";
 });
 
+document.querySelector("[data-open-budget-builder]").addEventListener("click", () => {
+  showPage("budget-builder");
+  location.hash = "#budget-builder";
+});
+
+document.querySelector("[data-add-work-application]").addEventListener("click", async () => {
+  await api("/api/work/applications", { method: "POST" });
+  renderCurrent();
+});
+
+workSearch.addEventListener("input", () => {
+  workQuery = workSearch.value;
+  renderWork();
+});
+
+document.querySelector("[data-open-work-sankey]").addEventListener("click", () => {
+  renderWorkSankey();
+  workSankeyDialog.showModal();
+});
+
+document.querySelector("[data-close-work-sankey]").addEventListener("click", () => {
+  workSankeyDialog.close();
+});
+
+document.querySelector("[data-back-to-budget]").addEventListener("click", () => {
+  showPage("budget");
+  location.hash = "#budget";
+});
+
 document.querySelector("[data-open-budget]").addEventListener("click", () => openBudgetForm());
+
+document.querySelector("[data-export-builder]").addEventListener("click", () => {
+  builderExportJson.value = builderExportText();
+  copyBuilderExportButton.textContent = "Copy";
+  builderExportDialog.showModal();
+  builderExportJson.focus();
+  builderExportJson.select();
+});
+
+document.querySelector("[data-close-builder-export]").addEventListener("click", () => {
+  builderExportDialog.close();
+});
+
+copyBuilderExportButton.addEventListener("click", async () => {
+  try {
+    await copyTextFromField(builderExportJson);
+    copyBuilderExportButton.textContent = "Copied";
+  } catch (error) {
+    copyBuilderExportButton.textContent = "Copy failed";
+  }
+});
+
+document.querySelector("[data-add-builder-bucket]").addEventListener("click", () => openBuilderBucketForm());
+
+document.querySelector("[data-close-builder-bucket]").addEventListener("click", () => {
+  builderBucketDialog.close();
+  editingBuilderBucketId = null;
+});
+
+builderBucketMode.addEventListener("change", () => {
+  setBuilderBucketMode(selectedBuilderBucketMode());
+});
+
+builderBucketForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(builderBucketForm);
+  try {
+    if (!editingBuilderBucketId && selectedBuilderBucketMode() === "months") {
+      const buckets = monthRangeBuckets(formData.get("rangeStartMonth"), formData.get("rangeEndMonth"));
+      for (const bucket of buckets) {
+        await api("/api/budget-builder/buckets", {
+          method: "POST",
+          body: JSON.stringify(bucket)
+        });
+      }
+    } else {
+      await api(editingBuilderBucketId ? `/api/budget-builder/buckets/${editingBuilderBucketId}` : "/api/budget-builder/buckets", {
+        method: editingBuilderBucketId ? "PATCH" : "POST",
+        body: JSON.stringify({
+          name: formData.get("name"),
+          startDate: normalizeDateText(formData.get("startDate")),
+          endDate: normalizeDateText(formData.get("endDate"))
+        })
+      });
+    }
+    builderBucketDialog.close();
+    editingBuilderBucketId = null;
+    renderCurrent();
+  } catch (error) {
+    window.alert(error.message || "Could not save bucket.");
+  }
+});
+
+document.querySelector("[data-close-builder-block]").addEventListener("click", () => {
+  builderBlockDialog.close();
+  editingBuilderBlockId = null;
+  editingBuilderBlockBucketId = null;
+});
+
+builderBlockForm.elements.type.addEventListener("change", () => {
+  updateBuilderCategoryOptions(builderBlockForm.elements.type.value, builderBlockForm.elements.category.value);
+});
+
+builderBlockForm.elements.template.addEventListener("change", () => {
+  applyBuilderBlockTemplate(builderBlockForm.elements.template.value);
+});
+
+builderBlockForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(builderBlockForm);
+  const payload = {
+    bucketId: editingBuilderBlockBucketId,
+    name: formData.get("name"),
+    type: formData.get("type"),
+    amount: formData.get("amount"),
+    category: formData.get("category"),
+    dueDate: normalizeDateText(formData.get("dueDate")),
+    repeatRule: formData.get("repeatRule"),
+    repeatEndDate: normalizeDateText(formData.get("repeatEndDate")),
+    notes: formData.get("notes")
+  };
+  await api(editingBuilderBlockId ? `/api/budget-builder/blocks/${editingBuilderBlockId}` : "/api/budget-builder/blocks", {
+    method: editingBuilderBlockId ? "PATCH" : "POST",
+    body: JSON.stringify(payload)
+  });
+  builderBlockDialog.close();
+  editingBuilderBlockId = null;
+  editingBuilderBlockBucketId = null;
+  renderCurrent();
+});
+
+deleteBuilderBlockButton.addEventListener("click", async () => {
+  if (!editingBuilderBlockId) {
+    return;
+  }
+  await api(`/api/budget-builder/blocks/${editingBuilderBlockId}`, { method: "DELETE" });
+  builderBlockDialog.close();
+  editingBuilderBlockId = null;
+  editingBuilderBlockBucketId = null;
+  renderCurrent();
+});
+
+startingCashInput.addEventListener("blur", async () => {
+  await api("/api/budget-builder/starting-cash", {
+    method: "PATCH",
+    body: JSON.stringify({ startingCash: startingCashInput.value })
+  });
+  renderCurrent();
+});
+
+startingCashInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    startingCashInput.blur();
+  }
+  if (event.key === "Escape") {
+    renderCurrent();
+  }
+});
+
+for (const template of document.querySelectorAll("[data-template-type]")) {
+  template.addEventListener("dragstart", (event) => {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("application/x-budget-template", template.dataset.templateType);
+  });
+}
 
 document.querySelector("[data-close-budget]").addEventListener("click", () => {
   budgetDialog.close();
@@ -1442,7 +2618,31 @@ function openPlaidReview(index = 0) {
   plaidDialog.showModal();
 }
 
+function openPlaidSkipped() {
+  renderPlaidSkippedTransactions();
+  plaidSkippedDialog.showModal();
+}
+
+async function refreshPlaidState(result, reopen = true) {
+  pendingPlaidTransactions = result.pending || [];
+  skippedPlaidTransactions = result.skipped || skippedPlaidTransactions;
+  render(await api("/api/finance"));
+
+  if (!reopen) {
+    return;
+  }
+
+  const nextIndex = Math.min(activePlaidIndex, pendingPlaidTransactions.length - 1);
+  if (nextIndex >= 0 && pendingPlaidTransactions.length) {
+    openPlaidReview(nextIndex);
+  } else {
+    plaidDialog.close();
+    renderPlaidButton();
+  }
+}
+
 plaidReviewButton.addEventListener("click", () => openPlaidReview());
+plaidSkippedButton.addEventListener("click", () => openPlaidSkipped());
 
 linkBankButton.addEventListener("click", async () => {
   linkBankButton.disabled = true;
@@ -1501,6 +2701,10 @@ document.querySelector("[data-close-plaid]").addEventListener("click", () => {
   plaidDialog.close();
 });
 
+document.querySelector("[data-close-plaid-skipped]").addEventListener("click", () => {
+  plaidSkippedDialog.close();
+});
+
 plaidLedgerSelect.addEventListener("change", () => {
   populatePlaidCategories(plaidLedgerSelect.value, plaidCategorySelect.value);
 });
@@ -1523,17 +2727,28 @@ plaidForm.addEventListener("submit", async (event) => {
     })
   });
 
-  pendingPlaidTransactions = result.pending || [];
-  render(await api("/api/finance"));
-  openPlaidReview(Math.min(activePlaidIndex, pendingPlaidTransactions.length - 1));
+  await refreshPlaidState(result);
 });
 
-const initialPage = location.hash === "#budget"
-  ? "budget"
-  : location.hash === "#debt"
-    ? "debt"
-    : location.hash === "#accounting"
-      ? "accounting"
-      : "finance";
+document.querySelector("[data-skip-plaid]").addEventListener("click", async () => {
+  const transaction = activePlaidTransaction();
+
+  if (!transaction) {
+    plaidDialog.close();
+    return;
+  }
+
+  const result = await api(`/api/plaid/transactions/${transaction.id}/skip`, {
+    method: "POST"
+  });
+
+  await refreshPlaidState(result);
+});
+
+window.addEventListener("hashchange", () => {
+  showPage(pageFromHash());
+});
+
+const initialPage = pageFromHash();
 showPage(initialPage);
 renderCurrent({ syncPlaid: initialPage === "finance" });

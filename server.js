@@ -85,6 +85,7 @@ const defaultCategories = {
     "Gift"
   ]
 };
+const workStatuses = ["Saved", "Applied", "Screen", "Interview", "Offer", "Rejected", "Withdrawn"];
 const plaidStartDate = "2026-06-01";
 const plaidApiHosts = {
   sandbox: "https://sandbox.plaid.com",
@@ -132,6 +133,27 @@ function initDatabase() {
        amount TEXT NOT NULL DEFAULT '',
        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE
      );
+     CREATE TABLE IF NOT EXISTS budget_builder_buckets (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT NOT NULL DEFAULT '',
+       start_date TEXT NOT NULL DEFAULT '',
+       end_date TEXT NOT NULL DEFAULT '',
+       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+     );
+     CREATE TABLE IF NOT EXISTS budget_builder_blocks (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       bucket_id INTEGER NOT NULL,
+       type TEXT NOT NULL DEFAULT 'expense',
+       name TEXT NOT NULL DEFAULT '',
+       amount TEXT NOT NULL DEFAULT '',
+       category TEXT NOT NULL DEFAULT '',
+       due_date TEXT NOT NULL DEFAULT '',
+       repeat_rule TEXT NOT NULL DEFAULT 'once',
+       repeat_end_date TEXT NOT NULL DEFAULT '',
+       notes TEXT NOT NULL DEFAULT '',
+       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       FOREIGN KEY (bucket_id) REFERENCES budget_builder_buckets(id) ON DELETE CASCADE
+     );
      CREATE TABLE IF NOT EXISTS custom_categories (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        ledger TEXT NOT NULL,
@@ -160,6 +182,7 @@ function initDatabase() {
        pending INTEGER NOT NULL DEFAULT 0,
        suggested_ledger TEXT NOT NULL DEFAULT '',
        reviewed_at TEXT NOT NULL DEFAULT '',
+       skipped_at TEXT NOT NULL DEFAULT '',
        ledger_type TEXT NOT NULL DEFAULT '',
        ledger_id INTEGER,
        description TEXT NOT NULL DEFAULT '',
@@ -173,6 +196,26 @@ function initDatabase() {
        institution_id TEXT NOT NULL DEFAULT '',
        institution_name TEXT NOT NULL DEFAULT '',
        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+     );
+     CREATE TABLE IF NOT EXISTS work_applications (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       company TEXT NOT NULL DEFAULT '',
+       role TEXT NOT NULL DEFAULT '',
+       status TEXT NOT NULL DEFAULT 'Saved',
+       applied_date TEXT NOT NULL DEFAULT '',
+       deadline_date TEXT NOT NULL DEFAULT '',
+       portal_url TEXT NOT NULL DEFAULT '',
+       notes TEXT NOT NULL DEFAULT '',
+       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+     );
+     CREATE TABLE IF NOT EXISTS work_status_history (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       application_id INTEGER NOT NULL,
+       status TEXT NOT NULL,
+       changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       note TEXT NOT NULL DEFAULT '',
+       FOREIGN KEY (application_id) REFERENCES work_applications(id) ON DELETE CASCADE
      );
      UPDATE spending
      SET category = 'Alcohol'
@@ -196,6 +239,46 @@ function initDatabase() {
     });
   } catch {
     // Column already exists.
+  }
+  try {
+    execFileSync("sqlite3", [dbPath, "ALTER TABLE plaid_transactions ADD COLUMN skipped_at TEXT NOT NULL DEFAULT '';"], {
+      stdio: "ignore"
+    });
+  } catch {
+    // Column already exists.
+  }
+  try {
+    execFileSync("sqlite3", [dbPath, "ALTER TABLE budget_builder_blocks ADD COLUMN due_date TEXT NOT NULL DEFAULT '';"], {
+      stdio: "ignore"
+    });
+  } catch {
+    // Column already exists.
+  }
+  try {
+    execFileSync("sqlite3", [dbPath, "ALTER TABLE budget_builder_blocks ADD COLUMN repeat_rule TEXT NOT NULL DEFAULT 'once';"], {
+      stdio: "ignore"
+    });
+  } catch {
+    // Column already exists.
+  }
+  try {
+    execFileSync("sqlite3", [dbPath, "ALTER TABLE budget_builder_blocks ADD COLUMN repeat_end_date TEXT NOT NULL DEFAULT '';"], {
+      stdio: "ignore"
+    });
+  } catch {
+    // Column already exists.
+  }
+  for (const statement of [
+    "ALTER TABLE work_applications ADD COLUMN deadline_date TEXT NOT NULL DEFAULT '';",
+    "ALTER TABLE work_applications ADD COLUMN portal_url TEXT NOT NULL DEFAULT '';",
+    "ALTER TABLE work_applications ADD COLUMN notes TEXT NOT NULL DEFAULT '';",
+    "ALTER TABLE work_applications ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP;"
+  ]) {
+    try {
+      execFileSync("sqlite3", [dbPath, statement], { stdio: "ignore" });
+    } catch {
+      // Column already exists.
+    }
   }
 }
 
@@ -227,8 +310,14 @@ function normalizeExistingDates() {
   normalizeDateColumn("income", "date");
   normalizeDateColumn("budgets", "start_date");
   normalizeDateColumn("budgets", "end_date");
+  normalizeDateColumn("budget_builder_buckets", "start_date");
+  normalizeDateColumn("budget_builder_buckets", "end_date");
+  normalizeDateColumn("budget_builder_blocks", "due_date");
+  normalizeDateColumn("budget_builder_blocks", "repeat_end_date");
   normalizeDateColumn("loans", "issued_date");
   normalizeDateColumn("plaid_transactions", "date");
+  normalizeDateColumn("work_applications", "applied_date");
+  normalizeDateColumn("work_applications", "deadline_date");
 
   const graduationDate = getPortalMeta("graduation_date");
   if (graduationDate) {
@@ -242,6 +331,32 @@ function sqlString(value) {
 
 function normalizeDate(value, defaultYear = "2026") {
   const text = String(value || "").trim();
+  const monthNames = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12
+  };
   let match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
   if (match) {
     return `${Number(match[2])}/${Number(match[3])}/${match[1]}`;
@@ -260,6 +375,11 @@ function normalizeDate(value, defaultYear = "2026") {
   match = text.match(/^0?(\d{1,2})\/0?(\d{1,2})$/);
   if (match) {
     return `${Number(match[1])}/${Number(match[2])}/${defaultYear}`;
+  }
+
+  match = text.match(/^([a-z]+)\s+0?(\d{1,2})(?:,?\s+(\d{4}))?$/i);
+  if (match && monthNames[match[1].toLowerCase()]) {
+    return `${monthNames[match[1].toLowerCase()]}/${Number(match[2])}/${match[3] || defaultYear}`;
   }
 
   return text;
@@ -322,6 +442,58 @@ function listBudgets() {
     ...budget,
     categories: categories.filter((category) => category.budgetId === budget.id)
   }));
+}
+
+function listBudgetBuilder() {
+  const bucketsOutput = runSql(
+    `SELECT id, name, start_date AS startDate, end_date AS endDate
+     FROM budget_builder_buckets
+     ORDER BY
+       CASE
+         WHEN start_date LIKE '%/%/%' THEN date(
+           substr(start_date, length(start_date) - 3, 4) || '-' ||
+           printf('%02d', CAST(substr(start_date, 1, instr(start_date, '/') - 1) AS INTEGER)) || '-' ||
+           printf(
+             '%02d',
+             CAST(
+               substr(
+                 substr(start_date, instr(start_date, '/') + 1),
+                 1,
+                 instr(substr(start_date, instr(start_date, '/') + 1), '/') - 1
+               ) AS INTEGER
+             )
+           )
+         )
+         ELSE NULL
+       END ASC,
+       id ASC;`,
+    { json: true }
+  ).trim();
+  const blocksOutput = runSql(
+    `SELECT id,
+            bucket_id AS bucketId,
+            type,
+            name,
+            amount,
+            category,
+            due_date AS dueDate,
+            repeat_rule AS repeatRule,
+            repeat_end_date AS repeatEndDate,
+            notes
+     FROM budget_builder_blocks
+     ORDER BY id ASC;`,
+    { json: true }
+  ).trim();
+  const buckets = bucketsOutput ? JSON.parse(bucketsOutput) : [];
+  const blocks = blocksOutput ? JSON.parse(blocksOutput) : [];
+
+  return {
+    startingCash: getPortalMeta("budget_builder_starting_cash"),
+    buckets: buckets.map((bucket) => ({
+      ...bucket,
+      blocks: blocks.filter((block) => block.bucketId === bucket.id)
+    }))
+  };
 }
 
 function listCustomCategories() {
@@ -427,6 +599,71 @@ function listLoans() {
   return output ? JSON.parse(output) : [];
 }
 
+function workStatus(value) {
+  return workStatuses.includes(value) ? value : "Saved";
+}
+
+function listWorkApplications() {
+  const applicationsOutput = runSql(
+    `SELECT id,
+            company,
+            role,
+            status,
+            applied_date AS appliedDate,
+            deadline_date AS deadlineDate,
+            portal_url AS portalUrl,
+            notes,
+            created_at AS createdAt,
+            updated_at AS updatedAt
+     FROM work_applications
+     ORDER BY
+       CASE
+         WHEN applied_date LIKE '%/%/%' THEN date(
+           substr(applied_date, length(applied_date) - 3, 4) || '-' ||
+           printf('%02d', CAST(substr(applied_date, 1, instr(applied_date, '/') - 1) AS INTEGER)) || '-' ||
+           printf(
+             '%02d',
+             CAST(
+               substr(
+                 substr(applied_date, instr(applied_date, '/') + 1),
+                 1,
+                 instr(substr(applied_date, instr(applied_date, '/') + 1), '/') - 1
+               ) AS INTEGER
+             )
+           )
+         )
+         ELSE NULL
+       END DESC,
+       updated_at DESC,
+       id DESC;`,
+    { json: true }
+  ).trim();
+  const historyOutput = runSql(
+    `SELECT id,
+            application_id AS applicationId,
+            status,
+            changed_at AS changedAt,
+            note
+     FROM work_status_history
+     ORDER BY id ASC;`,
+    { json: true }
+  ).trim();
+  const applications = applicationsOutput ? JSON.parse(applicationsOutput) : [];
+  const history = historyOutput ? JSON.parse(historyOutput) : [];
+
+  return applications.map((application) => ({
+    ...application,
+    history: history.filter((entry) => entry.applicationId === application.id)
+  }));
+}
+
+function insertWorkStatusHistory(applicationId, status, note = "") {
+  runSql(
+    `INSERT INTO work_status_history (application_id, status, note)
+     VALUES (${Number(applicationId)}, ${sqlString(workStatus(status))}, ${sqlString(note)});`
+  );
+}
+
 function listPlaidTransactions() {
   const output = runSql(
     `SELECT id,
@@ -442,6 +679,31 @@ function listPlaidTransactions() {
             description
      FROM plaid_transactions
      WHERE reviewed_at = ''
+       AND skipped_at = ''
+     ORDER BY date ASC, id ASC;`,
+    { json: true }
+  ).trim();
+
+  return output ? JSON.parse(output) : [];
+}
+
+function listSkippedPlaidTransactions() {
+  const output = runSql(
+    `SELECT id,
+            plaid_transaction_id AS plaidTransactionId,
+            account_id AS accountId,
+            name,
+            merchant_name AS merchantName,
+            amount,
+            date,
+            iso_currency_code AS isoCurrencyCode,
+            pending,
+            suggested_ledger AS suggestedLedger,
+            description,
+            skipped_at AS skippedAt
+     FROM plaid_transactions
+     WHERE reviewed_at = ''
+       AND skipped_at != ''
      ORDER BY date ASC, id ASC;`,
     { json: true }
   ).trim();
@@ -598,7 +860,8 @@ function queuePlaidTransaction(transaction) {
        date,
        iso_currency_code,
        pending,
-       suggested_ledger
+       suggested_ledger,
+       skipped_at
      )
      VALUES (
        ${sqlString(transaction.transaction_id)},
@@ -609,7 +872,8 @@ function queuePlaidTransaction(transaction) {
        ${sqlString(normalizeDate(transaction.date || ""))},
        ${sqlString(transaction.iso_currency_code || "")},
        ${transaction.pending ? 1 : 0},
-       ${sqlString(suggestedLedger)}
+       ${sqlString(suggestedLedger)},
+       ''
      )
      ON CONFLICT(plaid_transaction_id) DO UPDATE SET
        account_id = excluded.account_id,
@@ -672,7 +936,8 @@ async function syncPlaidTransactions() {
       environment: config.environment,
       linkedItems: listPlaidItems(),
       imported: 0,
-      pending: listPlaidTransactions()
+      pending: listPlaidTransactions(),
+      skipped: listSkippedPlaidTransactions()
     };
   }
 
@@ -706,7 +971,8 @@ async function syncPlaidTransactions() {
     environment: config.environment,
     linkedItems: listPlaidItems(),
     imported,
-    pending: listPlaidTransactions()
+    pending: listPlaidTransactions(),
+    skipped: listSkippedPlaidTransactions()
   };
 }
 
@@ -801,6 +1067,7 @@ function reviewPlaidTransaction(id, body) {
      FROM plaid_transactions
      WHERE id = ${id}
        AND reviewed_at = ''
+       AND skipped_at = ''
      LIMIT 1;`,
     { json: true }
   ).trim();
@@ -833,6 +1100,65 @@ function reviewPlaidTransaction(id, body) {
   return { ledger, ledgerId };
 }
 
+function skipPlaidTransaction(id) {
+  const output = runSql(
+    `SELECT id
+     FROM plaid_transactions
+     WHERE id = ${id}
+       AND reviewed_at = ''
+     LIMIT 1;`,
+    { json: true }
+  ).trim();
+  const transaction = output ? JSON.parse(output)[0] : null;
+
+  if (!transaction) {
+    return null;
+  }
+
+  runSql(
+    `UPDATE plaid_transactions
+     SET skipped_at = CURRENT_TIMESTAMP
+     WHERE id = ${id}
+       AND reviewed_at = ''
+       AND skipped_at = '';`
+  );
+
+  return {
+    pending: listPlaidTransactions(),
+    skipped: listSkippedPlaidTransactions()
+  };
+}
+
+function unskipPlaidTransaction(id) {
+  const output = runSql(
+    `SELECT id
+     FROM plaid_transactions
+     WHERE id = ${id}
+       AND reviewed_at = ''
+       AND skipped_at != ''
+     LIMIT 1;`,
+    { json: true }
+  ).trim();
+  const transaction = output ? JSON.parse(output)[0] : null;
+
+  if (!transaction) {
+    return null;
+  }
+
+  runSql(
+    `UPDATE plaid_transactions
+     SET skipped_at = ''
+     WHERE id = ${id}
+       AND reviewed_at = ''
+       AND skipped_at != '';`
+  );
+
+  return {
+    pending: listPlaidTransactions(),
+    skipped: listSkippedPlaidTransactions()
+  };
+}
+
 async function handleApi(request, response) {
   const { pathname } = new URL(request.url, `http://${request.headers.host}`);
 
@@ -849,12 +1175,119 @@ async function handleApi(request, response) {
       spending: listLedger("spending"),
       income: listLedger("income"),
       budgets: listBudgets(),
+      budgetBuilder: listBudgetBuilder(),
       categories: mergedCategories(),
       loans: listLoans(),
       graduationDate: getPortalMeta("graduation_date"),
       plaidTransactions: listPlaidTransactions(),
+      plaidSkippedTransactions: listSkippedPlaidTransactions(),
       plaidItems: listPlaidItems(),
-      plaidConfigured: getPlaidConfig().configured
+      plaidConfigured: getPlaidConfig().configured,
+      workApplications: listWorkApplications(),
+      workStatuses
+    });
+    return true;
+  }
+
+  if (pathname === "/api/work/applications" && request.method === "GET") {
+    sendJson(response, 200, {
+      applications: listWorkApplications(),
+      statuses: workStatuses
+    });
+    return true;
+  }
+
+  if (pathname === "/api/work/applications" && request.method === "POST") {
+    const body = await readBody(request);
+    const status = workStatus(body.status || "Saved");
+    runSql(
+      `INSERT INTO work_applications (company, role, status, applied_date, deadline_date, portal_url, notes)
+       VALUES (
+         ${sqlString(body.company || "")},
+         ${sqlString(body.role || "")},
+         ${sqlString(status)},
+         ${sqlString(normalizeDate(body.appliedDate || ""))},
+         ${sqlString(normalizeDate(body.deadlineDate || ""))},
+         ${sqlString(body.portalUrl || "")},
+         ${sqlString(body.notes || "")}
+       );`
+    );
+    const applicationId = Number(runSql("SELECT id FROM work_applications ORDER BY id DESC LIMIT 1;").trim());
+    insertWorkStatusHistory(applicationId, status, "Created");
+    sendJson(response, 201, {
+      applications: listWorkApplications(),
+      statuses: workStatuses
+    });
+    return true;
+  }
+
+  const workApplicationMatch = pathname.match(/^\/api\/work\/applications\/(\d+)$/);
+  if (workApplicationMatch && request.method === "PATCH") {
+    const id = Number(workApplicationMatch[1]);
+    const body = await readBody(request);
+    const updates = [];
+    const existingOutput = runSql(
+      `SELECT status
+       FROM work_applications
+       WHERE id = ${id}
+       LIMIT 1;`,
+      { json: true }
+    ).trim();
+    const existing = existingOutput ? JSON.parse(existingOutput)[0] : null;
+
+    if (!existing) {
+      sendJson(response, 404, { error: "Application not found." });
+      return true;
+    }
+
+    if (Object.hasOwn(body, "company")) {
+      updates.push(`company = ${sqlString(body.company)}`);
+    }
+    if (Object.hasOwn(body, "role")) {
+      updates.push(`role = ${sqlString(body.role)}`);
+    }
+    if (Object.hasOwn(body, "status")) {
+      updates.push(`status = ${sqlString(workStatus(body.status))}`);
+    }
+    if (Object.hasOwn(body, "appliedDate")) {
+      updates.push(`applied_date = ${sqlString(normalizeDate(body.appliedDate))}`);
+    }
+    if (Object.hasOwn(body, "deadlineDate")) {
+      updates.push(`deadline_date = ${sqlString(normalizeDate(body.deadlineDate))}`);
+    }
+    if (Object.hasOwn(body, "portalUrl")) {
+      updates.push(`portal_url = ${sqlString(body.portalUrl)}`);
+    }
+    if (Object.hasOwn(body, "notes")) {
+      updates.push(`notes = ${sqlString(body.notes)}`);
+    }
+
+    if (!updates.length) {
+      sendJson(response, 400, { error: "No editable field provided." });
+      return true;
+    }
+
+    updates.push("updated_at = CURRENT_TIMESTAMP");
+    runSql(`UPDATE work_applications SET ${updates.join(", ")} WHERE id = ${id};`);
+
+    if (Object.hasOwn(body, "status") && workStatus(body.status) !== existing.status) {
+      insertWorkStatusHistory(id, workStatus(body.status), "Status changed");
+    }
+
+    sendJson(response, 200, {
+      applications: listWorkApplications(),
+      statuses: workStatuses
+    });
+    return true;
+  }
+
+  if (workApplicationMatch && request.method === "DELETE") {
+    const id = Number(workApplicationMatch[1]);
+    runSql(`DELETE FROM work_status_history WHERE application_id = ${id};`);
+    runSql(`DELETE FROM work_applications WHERE id = ${id};`);
+    sendJson(response, 200, {
+      applications: listWorkApplications(),
+      statuses: workStatuses
     });
     return true;
   }
@@ -886,7 +1319,10 @@ async function handleApi(request, response) {
   }
 
   if (pathname === "/api/plaid/transactions" && request.method === "GET") {
-    sendJson(response, 200, { pending: listPlaidTransactions() });
+    sendJson(response, 200, {
+      pending: listPlaidTransactions(),
+      skipped: listSkippedPlaidTransactions()
+    });
     return true;
   }
 
@@ -901,13 +1337,156 @@ async function handleApi(request, response) {
       ...result,
       spending: listLedger("spending"),
       income: listLedger("income"),
-      pending: listPlaidTransactions()
+      pending: listPlaidTransactions(),
+      skipped: listSkippedPlaidTransactions()
     });
+    return true;
+  }
+
+  const plaidSkipMatch = pathname.match(/^\/api\/plaid\/transactions\/(\d+)\/skip$/);
+  if (plaidSkipMatch && request.method === "POST") {
+    const result = skipPlaidTransaction(Number(plaidSkipMatch[1]));
+    if (!result) {
+      sendJson(response, 404, { error: "Plaid transaction not found." });
+      return true;
+    }
+    sendJson(response, 200, result);
+    return true;
+  }
+
+  const plaidUnskipMatch = pathname.match(/^\/api\/plaid\/transactions\/(\d+)\/unskip$/);
+  if (plaidUnskipMatch && request.method === "POST") {
+    const result = unskipPlaidTransaction(Number(plaidUnskipMatch[1]));
+    if (!result) {
+      sendJson(response, 404, { error: "Plaid transaction not found." });
+      return true;
+    }
+    sendJson(response, 200, result);
     return true;
   }
 
   if (pathname === "/api/budgets" && request.method === "GET") {
     sendJson(response, 200, { budgets: listBudgets() });
+    return true;
+  }
+
+  if (pathname === "/api/budget-builder" && request.method === "GET") {
+    sendJson(response, 200, { budgetBuilder: listBudgetBuilder() });
+    return true;
+  }
+
+  if (pathname === "/api/budget-builder/starting-cash" && request.method === "PATCH") {
+    const body = await readBody(request);
+    setPortalMeta("budget_builder_starting_cash", body.startingCash || "");
+    sendJson(response, 200, { budgetBuilder: listBudgetBuilder() });
+    return true;
+  }
+
+  if (pathname === "/api/budget-builder/buckets" && request.method === "POST") {
+    const body = await readBody(request);
+    runSql(
+      `INSERT INTO budget_builder_buckets (name, start_date, end_date)
+       VALUES (
+         ${sqlString(body.name || "")},
+         ${sqlString(normalizeDate(body.startDate || ""))},
+         ${sqlString(normalizeDate(body.endDate || ""))}
+       );`
+    );
+    sendJson(response, 201, { budgetBuilder: listBudgetBuilder() });
+    return true;
+  }
+
+  const builderBucketMatch = pathname.match(/^\/api\/budget-builder\/buckets\/(\d+)$/);
+  if (builderBucketMatch && request.method === "PATCH") {
+    const id = Number(builderBucketMatch[1]);
+    const body = await readBody(request);
+    runSql(
+      `UPDATE budget_builder_buckets
+       SET name = ${sqlString(body.name || "")},
+           start_date = ${sqlString(normalizeDate(body.startDate || ""))},
+           end_date = ${sqlString(normalizeDate(body.endDate || ""))}
+       WHERE id = ${id};`
+    );
+    sendJson(response, 200, { budgetBuilder: listBudgetBuilder() });
+    return true;
+  }
+
+  if (builderBucketMatch && request.method === "DELETE") {
+    const id = Number(builderBucketMatch[1]);
+    runSql(`DELETE FROM budget_builder_blocks WHERE bucket_id = ${id};`);
+    runSql(`DELETE FROM budget_builder_buckets WHERE id = ${id};`);
+    sendJson(response, 200, { budgetBuilder: listBudgetBuilder() });
+    return true;
+  }
+
+  if (pathname === "/api/budget-builder/blocks" && request.method === "POST") {
+    const body = await readBody(request);
+    const type = body.type === "income" ? "income" : "expense";
+    runSql(
+      `INSERT INTO budget_builder_blocks (bucket_id, type, name, amount, category, due_date, repeat_rule, repeat_end_date, notes)
+       VALUES (
+         ${Number(body.bucketId)},
+         ${sqlString(type)},
+         ${sqlString(body.name || (type === "income" ? "Income" : "Expense"))},
+         ${sqlString(body.amount || "")},
+         ${sqlString(body.category || "")},
+         ${sqlString(normalizeDate(body.dueDate || ""))},
+         ${sqlString(["monthly", "biweekly", "weekly"].includes(body.repeatRule) ? body.repeatRule : "once")},
+         ${sqlString(normalizeDate(body.repeatEndDate || ""))},
+         ${sqlString(body.notes || "")}
+       );`
+    );
+    sendJson(response, 201, { budgetBuilder: listBudgetBuilder() });
+    return true;
+  }
+
+  const builderBlockMatch = pathname.match(/^\/api\/budget-builder\/blocks\/(\d+)$/);
+  if (builderBlockMatch && request.method === "PATCH") {
+    const id = Number(builderBlockMatch[1]);
+    const body = await readBody(request);
+    const updates = [];
+
+    if (Object.hasOwn(body, "bucketId")) {
+      updates.push(`bucket_id = ${Number(body.bucketId)}`);
+    }
+    if (Object.hasOwn(body, "type")) {
+      updates.push(`type = ${sqlString(body.type === "income" ? "income" : "expense")}`);
+    }
+    if (Object.hasOwn(body, "name")) {
+      updates.push(`name = ${sqlString(body.name || "")}`);
+    }
+    if (Object.hasOwn(body, "amount")) {
+      updates.push(`amount = ${sqlString(body.amount || "")}`);
+    }
+    if (Object.hasOwn(body, "category")) {
+      updates.push(`category = ${sqlString(body.category || "")}`);
+    }
+    if (Object.hasOwn(body, "dueDate")) {
+      updates.push(`due_date = ${sqlString(normalizeDate(body.dueDate || ""))}`);
+    }
+    if (Object.hasOwn(body, "repeatRule")) {
+      updates.push(`repeat_rule = ${sqlString(["monthly", "biweekly", "weekly"].includes(body.repeatRule) ? body.repeatRule : "once")}`);
+    }
+    if (Object.hasOwn(body, "repeatEndDate")) {
+      updates.push(`repeat_end_date = ${sqlString(normalizeDate(body.repeatEndDate || ""))}`);
+    }
+    if (Object.hasOwn(body, "notes")) {
+      updates.push(`notes = ${sqlString(body.notes || "")}`);
+    }
+
+    if (!updates.length) {
+      sendJson(response, 400, { error: "No editable field provided." });
+      return true;
+    }
+
+    runSql(`UPDATE budget_builder_blocks SET ${updates.join(", ")} WHERE id = ${id};`);
+    sendJson(response, 200, { budgetBuilder: listBudgetBuilder() });
+    return true;
+  }
+
+  if (builderBlockMatch && request.method === "DELETE") {
+    runSql(`DELETE FROM budget_builder_blocks WHERE id = ${Number(builderBlockMatch[1])};`);
+    sendJson(response, 200, { budgetBuilder: listBudgetBuilder() });
     return true;
   }
 

@@ -19,7 +19,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open `http://127.0.0.1:3000`.
+Open `localhost:3000`.
 
 The app creates `data/life-portal.sqlite` on first run. Keep `.env` and `data/` private.
 
