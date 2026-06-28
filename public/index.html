@@ -35,6 +35,15 @@
         </span>
         <span>Debt</span>
       </a>
+      <a class="tab" href="#assets" data-page-link="assets">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 3v18"/>
+            <path d="M17 7.5c-1-1-2.5-1.5-4.5-1.5-2.4 0-4 1.1-4 2.8 0 1.8 1.8 2.4 3.9 2.8 2.4.5 4.3 1 4.3 3 0 1.8-1.7 3.1-4.4 3.1-2.1 0-3.8-.6-5.1-1.9"/>
+          </svg>
+        </span>
+        <span>Assets</span>
+      </a>
       <a class="tab" href="#work" data-page-link="work">
         <span class="tab-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
@@ -260,6 +269,22 @@
           </section>
         </div>
       </section>
+      <section class="assets-page page-view" data-page="assets" aria-labelledby="assets-title" hidden>
+        <div class="finance-head">
+          <h1 id="assets-title">Assets</h1>
+        </div>
+        <section class="asset-icon-row" aria-label="Asset totals">
+          <button class="asset-icon-metric" type="button" data-open-assets-cash>
+            <div class="asset-line-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 3v18"/>
+                <path d="M17 7.5c-1-1-2.5-1.5-4.5-1.5-2.4 0-4 1.1-4 2.8 0 1.8 1.8 2.4 3.9 2.8 2.4.5 4.3 1 4.3 3 0 1.8-1.7 3.1-4.4 3.1-2.1 0-3.8-.6-5.1-1.9"/>
+              </svg>
+            </div>
+            <strong data-assets-cash-total>$0.00</strong>
+          </button>
+        </section>
+      </section>
       <section class="work-page page-view" data-page="work" aria-labelledby="work-title" hidden>
         <div class="finance-head">
           <h1 id="work-title">Work</h1>
@@ -309,14 +334,78 @@
         </section>
       </section>
     </main>
+    <dialog class="budget-dialog assets-cash-dialog" data-assets-cash-dialog>
+      <div class="budget-dialog-head">
+        <h2>Cash Accounts</h2>
+        <button class="delete-row" type="button" data-close-assets-cash aria-label="Close cash accounts">x</button>
+      </div>
+      <div class="assets-cash-summary" data-assets-cash-summary>$0.00</div>
+      <div class="assets-cash-list" data-assets-cash-list></div>
+    </dialog>
     <dialog class="budget-dialog sankey-dialog finance-sankey-dialog" data-finance-sankey-dialog>
       <form class="budget-form" method="dialog">
         <div class="budget-dialog-head">
           <h2>Income Flow</h2>
-          <button class="delete-row" type="button" data-close-finance-sankey aria-label="Close income flow">x</button>
+          <div class="sankey-dialog-actions">
+            <label class="sankey-sim-toggle">
+              <input type="checkbox" data-sankey-simulation-enabled>
+              <span aria-hidden="true"></span>
+              <b>Simulation</b>
+            </label>
+            <button class="add-button sankey-simulate-button" type="button" data-open-sankey-simulation>Simulate</button>
+            <button class="delete-row" type="button" data-close-finance-sankey aria-label="Close income flow">x</button>
+          </div>
         </div>
         <div class="sankey-chart finance-sankey-chart" data-finance-sankey-chart></div>
       </form>
+    </dialog>
+    <dialog class="budget-dialog sankey-simulation-dialog" data-sankey-simulation-dialog>
+      <form class="budget-form" method="dialog" data-sankey-simulation-form>
+        <div class="budget-dialog-head">
+          <h2>Simulation</h2>
+          <button class="delete-row" type="button" data-close-sankey-simulation aria-label="Close simulation">x</button>
+        </div>
+        <div class="sankey-simulation-fields">
+          <label>
+            <span>Type</span>
+            <select class="ledger-select" name="ledger" data-sankey-simulation-ledger>
+              <option value="income">Income</option>
+              <option value="spending">Spending</option>
+            </select>
+          </label>
+          <label>
+            <span>Category Mode</span>
+            <select class="ledger-select" name="mode" data-sankey-simulation-mode>
+              <option value="existing">Existing Category</option>
+              <option value="label">New Label</option>
+            </select>
+          </label>
+          <label data-sankey-simulation-existing-field>
+            <span>Category</span>
+            <select class="ledger-select" name="category" data-sankey-simulation-category></select>
+          </label>
+          <label data-sankey-simulation-label-field hidden>
+            <span>Label</span>
+            <input class="ledger-input" name="label" type="text" placeholder="Scenario label" data-sankey-simulation-label>
+          </label>
+          <label>
+            <span>Amount</span>
+            <input class="ledger-input amount" name="amount" type="text" inputmode="decimal" placeholder="0" required>
+          </label>
+        </div>
+        <div class="sankey-simulation-list" data-sankey-simulation-list></div>
+        <div class="budget-form-actions">
+          <button class="add-button save-budget" type="submit">Add Simulation</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog class="budget-dialog sankey-transactions-dialog" data-sankey-transactions-dialog>
+      <div class="budget-dialog-head">
+        <h2 data-sankey-transactions-title>Transactions</h2>
+        <button class="delete-row" type="button" data-close-sankey-transactions aria-label="Close transactions">x</button>
+      </div>
+      <div class="sankey-transactions-summary" data-sankey-transactions-summary></div>
+      <div class="sankey-transactions-list" data-sankey-transactions-list></div>
     </dialog>
     <dialog class="budget-dialog sankey-dialog" data-work-sankey-dialog>
       <form class="budget-form" method="dialog">

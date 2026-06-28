@@ -92,6 +92,7 @@ main {
 .finance-page,
 .accounting-page,
 .debt-page,
+.assets-page,
 .work-page {
   width: 100%;
   padding: 28px 24px 0;
@@ -247,6 +248,102 @@ h2 {
   gap: 10px;
 }
 
+.asset-icon-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+  margin-top: 14px;
+}
+
+.asset-icon-metric {
+  width: 112px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.asset-icon-metric:focus-visible {
+  outline: 1px solid var(--aquamarine);
+  outline-offset: 8px;
+}
+
+.asset-line-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--text-active);
+}
+
+.asset-line-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.45;
+}
+
+.asset-icon-metric strong {
+  color: var(--text-active);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.assets-cash-dialog {
+  width: min(520px, calc(100vw - 40px));
+}
+
+.assets-cash-summary {
+  color: var(--text-active);
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.assets-cash-list {
+  display: grid;
+  max-height: min(420px, calc(100vh - 220px));
+  overflow-y: auto;
+}
+
+.assets-cash-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.assets-cash-account {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.assets-cash-account strong,
+.assets-cash-row > strong {
+  color: var(--text-active);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.assets-cash-account span,
+.assets-cash-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .work-actions {
   display: flex;
   align-items: center;
@@ -342,6 +439,159 @@ h2 {
   flex-direction: column;
 }
 
+.sankey-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sankey-sim-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sankey-sim-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sankey-sim-toggle span {
+  width: 32px;
+  height: 18px;
+  border: 1px solid var(--row-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  position: relative;
+}
+
+.sankey-sim-toggle span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+.sankey-sim-toggle input:checked + span::after {
+  transform: translateX(14px);
+  background: var(--aquamarine);
+}
+
+.sankey-sim-toggle input:checked + span {
+  border-color: rgba(159, 252, 223, 0.56);
+}
+
+.sankey-sim-toggle b {
+  font-weight: 500;
+}
+
+.sankey-simulate-button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.sankey-simulation-dialog {
+  width: min(620px, calc(100vw - 40px));
+}
+
+.sankey-simulation-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sankey-simulation-fields label {
+  display: grid;
+  gap: 4px;
+}
+
+.sankey-simulation-fields span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sankey-simulation-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.sankey-simulation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.sankey-simulation-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-active);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sankey-simulation-row strong,
+.sankey-simulation-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sankey-transactions-dialog {
+  width: min(760px, calc(100vw - 40px));
+}
+
+.sankey-transactions-summary {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sankey-transactions-list {
+  display: grid;
+  max-height: min(520px, calc(100vh - 220px));
+  overflow-y: auto;
+}
+
+.sankey-transaction-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 120px;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.sankey-transaction-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-active);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sankey-transaction-row strong,
+.sankey-transaction-row small {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+}
+
 .sankey-chart {
   min-height: 340px;
   display: grid;
@@ -379,6 +629,16 @@ h2 {
   stroke-opacity: 0.58;
 }
 
+.finance-sankey-link.is-clickable,
+.finance-sankey-node.is-clickable {
+  cursor: pointer;
+}
+
+.finance-sankey-node.is-clickable:focus-visible rect {
+  outline: 2px solid var(--aquamarine);
+  outline-offset: 3px;
+}
+
 .finance-sankey-node rect {
   rx: 3px;
 }
@@ -388,7 +648,7 @@ h2 {
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .finance-sankey-node .finance-sankey-value {
@@ -1597,7 +1857,8 @@ h2 {
 
   .budget-fields,
   .loan-fields,
-  .builder-block-fields {
+  .builder-block-fields,
+  .sankey-simulation-fields {
     grid-template-columns: 1fr;
   }
 

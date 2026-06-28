@@ -847,6 +847,56 @@ async function requestPlaidTransactionSync(config, item, cursor = "") {
   return payload;
 }
 
+async function requestPlaidAccountBalances(config, accessToken) {
+  const response = await fetch(`${config.host}/accounts/balance/get`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    signal: AbortSignal.timeout(4000),
+    body: JSON.stringify({
+      client_id: config.clientId,
+      secret: config.secret,
+      access_token: accessToken
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message = payload.error_message || payload.error_code || `Plaid balances failed: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return Array.isArray(payload.accounts) ? payload.accounts : [];
+}
+
+async function listPlaidAccounts() {
+  const config = getPlaidConfig();
+  const accessTokens = listPlaidAccessTokens();
+
+  if (!config.configured || !accessTokens.length) {
+    return [];
+  }
+
+  const accountGroups = await Promise.all(accessTokens.map(async (accessToken) => {
+    try {
+      return await requestPlaidAccountBalances(config, accessToken);
+    } catch {
+      return [];
+    }
+  }));
+
+  return accountGroups.flat().map((account) => ({
+    accountId: account.account_id || "",
+    name: account.name || account.official_name || "",
+    type: account.type || "",
+    subtype: account.subtype || "",
+    balances: {
+      available: account.balances?.available ?? null,
+      current: account.balances?.current ?? null,
+      isoCurrencyCode: account.balances?.iso_currency_code || ""
+    }
+  }));
+}
+
 function queuePlaidTransaction(transaction) {
   if (!transaction.transaction_id || String(transaction.date || "") <= plaidStartDate) {
     return false;
@@ -1186,6 +1236,7 @@ async function handleApi(request, response) {
       plaidTransactions: listPlaidTransactions(),
       plaidSkippedTransactions: listSkippedPlaidTransactions(),
       plaidItems: listPlaidItems(),
+      plaidAccounts: await listPlaidAccounts(),
       plaidConfigured: getPlaidConfig().configured,
       workApplications: listWorkApplications(),
       workStatuses

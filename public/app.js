@@ -88,11 +88,29 @@ const loanDialog = document.querySelector("[data-loan-dialog]");
 const loanForm = document.querySelector("[data-loan-form]");
 const totalDebt = document.querySelector("[data-total-debt]");
 const graduationDateLabel = document.querySelector("[data-graduation-date-label]");
+const assetsCashTotal = document.querySelector("[data-assets-cash-total]");
+const assetsCashDialog = document.querySelector("[data-assets-cash-dialog]");
+const assetsCashSummary = document.querySelector("[data-assets-cash-summary]");
+const assetsCashList = document.querySelector("[data-assets-cash-list]");
 const workList = document.querySelector("[data-work-list]");
 const workSearch = document.querySelector("[data-work-search]");
 const workCountLabel = document.querySelector("[data-work-count-label]");
 const financeSankeyDialog = document.querySelector("[data-finance-sankey-dialog]");
 const financeSankeyChart = document.querySelector("[data-finance-sankey-chart]");
+const sankeySimulationDialog = document.querySelector("[data-sankey-simulation-dialog]");
+const sankeySimulationForm = document.querySelector("[data-sankey-simulation-form]");
+const sankeySimulationEnabledInput = document.querySelector("[data-sankey-simulation-enabled]");
+const sankeySimulationLedger = document.querySelector("[data-sankey-simulation-ledger]");
+const sankeySimulationMode = document.querySelector("[data-sankey-simulation-mode]");
+const sankeySimulationCategory = document.querySelector("[data-sankey-simulation-category]");
+const sankeySimulationLabel = document.querySelector("[data-sankey-simulation-label]");
+const sankeySimulationExistingField = document.querySelector("[data-sankey-simulation-existing-field]");
+const sankeySimulationLabelField = document.querySelector("[data-sankey-simulation-label-field]");
+const sankeySimulationList = document.querySelector("[data-sankey-simulation-list]");
+const sankeyTransactionsDialog = document.querySelector("[data-sankey-transactions-dialog]");
+const sankeyTransactionsTitle = document.querySelector("[data-sankey-transactions-title]");
+const sankeyTransactionsSummary = document.querySelector("[data-sankey-transactions-summary]");
+const sankeyTransactionsList = document.querySelector("[data-sankey-transactions-list]");
 const workSankeyDialog = document.querySelector("[data-work-sankey-dialog]");
 const workSankeyChart = document.querySelector("[data-work-sankey-chart]");
 const openAccountingButton = document.querySelector("[data-open-accounting]");
@@ -133,7 +151,7 @@ const workSummaryElements = {
   offers: document.querySelector("[data-work-offers]"),
   responseRate: document.querySelector("[data-work-response-rate]")
 };
-let financeData = { spending: [], income: [], budgets: [], loans: [], graduationDate: "", workApplications: [], workStatuses: defaultWorkStatuses };
+let financeData = { spending: [], income: [], budgets: [], loans: [], graduationDate: "", plaidAccounts: [], workApplications: [], workStatuses: defaultWorkStatuses };
 let editingBudgetId = null;
 let deletingBudgetId = null;
 let editingBuilderBucketId = null;
@@ -149,6 +167,10 @@ let plaidConfigured = false;
 let plaidSyncPromise = null;
 let categoryLedger = "spending";
 let workQuery = "";
+const sankeySimulationStorageKey = "lifePortal.financeSankeySimulations";
+const sankeySimulationEnabledKey = "lifePortal.financeSankeySimulationEnabled";
+let sankeySimulations = loadSankeySimulations();
+let sankeySimulationEnabled = localStorage.getItem(sankeySimulationEnabledKey) === "true";
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -229,6 +251,7 @@ function updateLedgerCategories(categories = {}) {
       categories: uniqueCategories(categories.income || defaultLedgerCategories.income.categories)
     }
   };
+  updateSankeySimulationCategories();
 }
 
 function textInput(ledger, row, field, value) {
@@ -268,7 +291,10 @@ function numberValue(value) {
 }
 
 function formatNumber(value) {
-  return value.toFixed(2);
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 }
 
 function money(value) {
@@ -580,6 +606,57 @@ function renderDebt() {
     : "No graduation date";
 }
 
+function cashBalanceForAccount(account) {
+  const balance = account?.balances || {};
+  return numberValue(balance.available ?? balance.current ?? account?.available ?? account?.current ?? 0);
+}
+
+function cashAccounts() {
+  return (financeData.plaidAccounts || [])
+    .filter((account) => !account.type || account.type === "depository");
+}
+
+function cashAccountsTotal() {
+  return cashAccounts().reduce((total, account) => total + cashBalanceForAccount(account), 0);
+}
+
+function renderAssets() {
+  assetsCashTotal.textContent = money(cashAccountsTotal());
+}
+
+function renderAssetsCashDialog() {
+  const accounts = cashAccounts();
+  const total = cashAccountsTotal();
+  assetsCashSummary.textContent = money(total);
+  assetsCashList.replaceChildren(
+    ...accounts.map((account) => {
+      const row = document.createElement("div");
+      row.className = "assets-cash-row";
+
+      const body = document.createElement("div");
+      body.className = "assets-cash-account";
+      const name = document.createElement("strong");
+      name.textContent = account.name || "Bank Account";
+      const meta = document.createElement("span");
+      meta.textContent = [account.subtype, account.type].filter(Boolean).join(" · ");
+      body.append(name, meta);
+
+      const amount = document.createElement("strong");
+      amount.textContent = money(cashBalanceForAccount(account));
+
+      row.append(body, amount);
+      return row;
+    })
+  );
+
+  if (!accounts.length) {
+    const empty = document.createElement("div");
+    empty.className = "assets-cash-empty";
+    empty.textContent = "No bank account balances found.";
+    assetsCashList.append(empty);
+  }
+}
+
 function workStatuses() {
   return financeData.workStatuses?.length ? financeData.workStatuses : defaultWorkStatuses;
 }
@@ -807,10 +884,172 @@ function groupedLedgerTotals(rows, fallbackCategory) {
     .sort((a, b) => b.amount - a.amount || a.category.localeCompare(b.category));
 }
 
+function loadSankeySimulations() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(sankeySimulationStorageKey) || "[]");
+    return Array.isArray(saved)
+      ? saved.filter((item) => ["income", "spending"].includes(item.ledger) && item.category && numberValue(item.amount) > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSankeySimulations() {
+  localStorage.setItem(sankeySimulationStorageKey, JSON.stringify(sankeySimulations));
+}
+
+function saveSankeySimulationEnabled() {
+  localStorage.setItem(sankeySimulationEnabledKey, sankeySimulationEnabled ? "true" : "false");
+}
+
+function simulatedRowsForLedger(ledger) {
+  if (!sankeySimulationEnabled) {
+    return [];
+  }
+  return sankeySimulations
+    .filter((item) => item.ledger === ledger)
+    .map((item) => ({
+      category: item.category,
+      amount: item.amount,
+      title: "Simulation",
+      date: "",
+      isSimulation: true
+    }));
+}
+
+function sankeyCategoryRows(kind, category) {
+  const ledger = kind === "income" ? "income" : kind === "spending" ? "spending" : "";
+  if (!ledger || !category) {
+    return [];
+  }
+  const sourceRows = ledger === "income"
+    ? [...(financeData.income || []), ...simulatedRowsForLedger("income")]
+    : [...(financeData.spending || []), ...simulatedRowsForLedger("spending")];
+  return sourceRows
+    .filter((row) => row.category === category)
+    .map((row) => ({
+      ...row,
+      ledger
+    }))
+    .sort((a, b) => compareAppDates(b.date, a.date) || numberValue(b.amount) - numberValue(a.amount));
+}
+
+function openSankeyTransactions(kind, category) {
+  const rows = sankeyCategoryRows(kind, category);
+  const label = kind === "income" ? "Income" : "Spending";
+  const total = rows.reduce((sum, row) => sum + numberValue(row.amount), 0);
+  sankeyTransactionsTitle.textContent = `${category} ${label}`;
+  sankeyTransactionsSummary.textContent = `${rows.length} transaction${rows.length === 1 ? "" : "s"} · ${money(total)}`;
+  sankeyTransactionsList.replaceChildren(
+    ...(rows.length ? rows : []).map((row) => {
+      const item = document.createElement("div");
+      item.className = "sankey-transaction-row";
+      item.append(document.createElement("span"));
+      item.append(document.createElement("strong"));
+      item.append(document.createElement("small"));
+      item.children[0].textContent = row.title || (row.isSimulation ? "Simulation" : "Untitled");
+      item.children[1].textContent = money(numberValue(row.amount));
+      item.children[2].textContent = row.isSimulation
+        ? "Simulation"
+        : (row.date ? displayAppDate(row.date) : "No date");
+      return item;
+    })
+  );
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "sankey-simulation-empty";
+    empty.textContent = "No transactions found for this category.";
+    sankeyTransactionsList.append(empty);
+  }
+  sankeyTransactionsDialog.showModal();
+}
+
+function sankeyClickableCategory(node) {
+  return node.kind === "income" || node.kind === "spending"
+    ? { kind: node.kind, category: node.name }
+    : null;
+}
+
+function updateSankeySimulationCategories() {
+  if (!sankeySimulationCategory || !sankeySimulationLedger) {
+    return;
+  }
+  const ledger = sankeySimulationLedger.value === "spending" ? "spending" : "income";
+  const categories = categoriesForLedger(ledger).filter((category) => category !== "Set Category");
+  sankeySimulationCategory.replaceChildren(
+    ...categories.map((category) => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = category;
+      return option;
+    })
+  );
+}
+
+function updateSankeySimulationMode() {
+  const isLabelMode = sankeySimulationMode?.value === "label";
+  if (sankeySimulationExistingField) {
+    sankeySimulationExistingField.hidden = isLabelMode;
+  }
+  if (sankeySimulationLabelField) {
+    sankeySimulationLabelField.hidden = !isLabelMode;
+  }
+  if (sankeySimulationLabel) {
+    sankeySimulationLabel.required = isLabelMode;
+  }
+  if (sankeySimulationCategory) {
+    sankeySimulationCategory.required = !isLabelMode;
+  }
+}
+
+function renderSankeySimulationList() {
+  if (!sankeySimulationList) {
+    return;
+  }
+  if (sankeySimulationEnabledInput) {
+    sankeySimulationEnabledInput.checked = sankeySimulationEnabled;
+  }
+  sankeySimulationList.replaceChildren(
+    ...(sankeySimulations.length ? sankeySimulations : []).map((item) => {
+      const row = document.createElement("div");
+      row.className = "sankey-simulation-row";
+      row.append(document.createElement("span"));
+      row.append(document.createElement("strong"));
+      const label = item.ledger === "income" ? "Income" : "Spending";
+      row.children[0].textContent = `${label}: ${item.category}`;
+      row.children[1].textContent = money(numberValue(item.amount));
+      const button = document.createElement("button");
+      button.className = "delete-row";
+      button.type = "button";
+      button.setAttribute("aria-label", `Remove ${item.category} simulation`);
+      button.textContent = "x";
+      button.addEventListener("click", () => {
+        sankeySimulations = sankeySimulations.filter((savedItem) => savedItem.id !== item.id);
+        saveSankeySimulations();
+        renderSankeySimulationList();
+        renderFinanceSankey();
+      });
+      row.append(button);
+      return row;
+    })
+  );
+  if (!sankeySimulations.length) {
+    const empty = document.createElement("div");
+    empty.className = "sankey-simulation-empty";
+    empty.textContent = "No saved simulations.";
+    sankeySimulationList.append(empty);
+  }
+}
+
 function financeSankeyModel() {
-  const incomeTotals = groupedLedgerTotals(financeData.income, "Uncategorized Income");
+  const incomeTotals = groupedLedgerTotals(
+    [...(financeData.income || []), ...simulatedRowsForLedger("income")],
+    "Uncategorized Income"
+  );
   const spendingTotals = groupedLedgerTotals(
-    (financeData.spending || []).filter((row) => row.category !== "Extracted Value"),
+    [...(financeData.spending || []), ...simulatedRowsForLedger("spending")]
+      .filter((row) => row.category !== "Extracted Value"),
     "Uncategorized Spending"
   );
   const totalIncome = incomeTotals.reduce((total, row) => total + row.amount, 0);
@@ -899,15 +1138,32 @@ function renderFinanceSankey() {
   const labelAnchor = (d) => (
     d.kind === "income" || d.kind === "unfunded" ? "end" : "start"
   );
+  const openNodeCategory = (node) => {
+    const category = sankeyClickableCategory(node);
+    if (category) {
+      openSankeyTransactions(category.kind, category.category);
+    }
+  };
+  const openLinkCategory = (link) => {
+    const category = sankeyClickableCategory(link.source) || sankeyClickableCategory(link.target);
+    if (category) {
+      openSankeyTransactions(category.kind, category.category);
+    }
+  };
 
   svg.append("g")
     .selectAll("path")
     .data(graph.links)
     .join("path")
     .attr("class", "finance-sankey-link")
+    .classed("is-clickable", (link) => Boolean(sankeyClickableCategory(link.source) || sankeyClickableCategory(link.target)))
     .attr("d", d3.sankeyLinkHorizontal())
     .attr("stroke", (link) => color(link.target.kind))
     .attr("stroke-width", (link) => Math.max(1, link.width))
+    .on("click", (event, link) => {
+      event.stopPropagation();
+      openLinkCategory(link);
+    })
     .append("title")
     .text((link) => `${link.source.name} to ${link.target.name}: ${money(link.value)}`);
 
@@ -915,7 +1171,20 @@ function renderFinanceSankey() {
     .selectAll("g")
     .data(graph.nodes)
     .join("g")
-    .attr("class", "finance-sankey-node");
+    .attr("class", "finance-sankey-node")
+    .classed("is-clickable", (d) => Boolean(sankeyClickableCategory(d)))
+    .attr("role", (d) => sankeyClickableCategory(d) ? "button" : null)
+    .attr("tabindex", (d) => sankeyClickableCategory(d) ? "0" : null)
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      openNodeCategory(d);
+    })
+    .on("keydown", (event, d) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openNodeCategory(d);
+      }
+    });
 
   node.append("rect")
     .attr("x", (d) => d.x0)
@@ -2284,6 +2553,7 @@ function render(data) {
   renderBudgets();
   renderBudgetBuilder();
   renderDebt();
+  renderAssets();
   renderWork();
   renderAccounting(data);
   if (financeSankeyDialog?.open) {
@@ -2472,11 +2742,13 @@ function pageFromHash() {
       ? "budget-builder"
       : location.hash === "#debt"
         ? "debt"
-        : location.hash === "#work"
-          ? "work"
-          : location.hash === "#accounting"
-            ? "accounting"
-            : "finance";
+        : location.hash === "#assets"
+          ? "assets"
+          : location.hash === "#work"
+            ? "work"
+            : location.hash === "#accounting"
+              ? "accounting"
+              : "finance";
 }
 
 for (const link of pageLinks) {
@@ -2520,12 +2792,88 @@ document.querySelector("[data-close-work-sankey]").addEventListener("click", () 
 });
 
 document.querySelector("[data-open-finance-sankey]").addEventListener("click", () => {
+  renderSankeySimulationList();
   financeSankeyDialog.showModal();
   requestAnimationFrame(() => renderFinanceSankey());
 });
 
 document.querySelector("[data-close-finance-sankey]").addEventListener("click", () => {
   financeSankeyDialog.close();
+});
+
+document.querySelector("[data-open-assets-cash]").addEventListener("click", () => {
+  renderAssetsCashDialog();
+  assetsCashDialog.showModal();
+});
+
+document.querySelector("[data-close-assets-cash]").addEventListener("click", () => {
+  assetsCashDialog.close();
+});
+
+document.querySelector("[data-open-sankey-simulation]").addEventListener("click", () => {
+  sankeySimulationForm.reset();
+  sankeySimulationLedger.value = "income";
+  sankeySimulationMode.value = "existing";
+  updateSankeySimulationCategories();
+  updateSankeySimulationMode();
+  renderSankeySimulationList();
+  sankeySimulationDialog.showModal();
+});
+
+document.querySelector("[data-close-sankey-simulation]").addEventListener("click", () => {
+  sankeySimulationDialog.close();
+});
+
+document.querySelector("[data-close-sankey-transactions]").addEventListener("click", () => {
+  sankeyTransactionsDialog.close();
+});
+
+sankeySimulationEnabledInput.addEventListener("change", () => {
+  sankeySimulationEnabled = sankeySimulationEnabledInput.checked;
+  saveSankeySimulationEnabled();
+  renderSankeySimulationList();
+  renderFinanceSankey();
+});
+
+sankeySimulationLedger.addEventListener("change", () => {
+  updateSankeySimulationCategories();
+});
+
+sankeySimulationMode.addEventListener("change", () => {
+  updateSankeySimulationMode();
+});
+
+sankeySimulationForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(sankeySimulationForm);
+  const ledger = formData.get("ledger") === "spending" ? "spending" : "income";
+  const mode = formData.get("mode") === "label" ? "label" : "existing";
+  const category = mode === "label"
+    ? String(formData.get("label") || "").trim()
+    : String(formData.get("category") || "").trim();
+  const amount = numberValue(formData.get("amount"));
+  if (!category || amount <= 0) {
+    return;
+  }
+  sankeySimulations = [
+    ...sankeySimulations,
+    {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      ledger,
+      category,
+      amount: formatNumber(amount)
+    }
+  ];
+  sankeySimulationEnabled = true;
+  saveSankeySimulations();
+  saveSankeySimulationEnabled();
+  sankeySimulationForm.reset();
+  sankeySimulationLedger.value = ledger;
+  sankeySimulationMode.value = mode;
+  updateSankeySimulationCategories();
+  updateSankeySimulationMode();
+  renderSankeySimulationList();
+  renderFinanceSankey();
 });
 
 window.addEventListener("resize", () => {
