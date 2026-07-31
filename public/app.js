@@ -114,6 +114,32 @@ const sankeyTransactionsList = document.querySelector("[data-sankey-transactions
 const workSankeyDialog = document.querySelector("[data-work-sankey-dialog]");
 const workSankeyChart = document.querySelector("[data-work-sankey-chart]");
 const openAccountingButton = document.querySelector("[data-open-accounting]");
+const classElements = {
+  tabs: document.querySelector("[data-class-tabs]"),
+  title: document.querySelector("[data-class-title]"),
+  description: document.querySelector("[data-class-description]"),
+  quizBody: document.querySelector("[data-class-quiz-body]"),
+  quizProgress: document.querySelector("[data-class-quiz-progress]"),
+  progressBar: document.querySelector("[data-class-progress-bar]"),
+  sections: document.querySelector("[data-class-sections]"),
+  openQuestions: document.querySelector("[data-class-open-questions]"),
+  studyPlan: document.querySelector("[data-class-study-plan]"),
+  codingPanel: document.querySelector("[data-class-coding-panel]"),
+  codingQuestions: document.querySelector("[data-class-coding-questions]"),
+  keyTerms: document.querySelector("[data-class-key-terms]"),
+  practice: document.querySelector("[data-class-practice]"),
+  settingsDialog: document.querySelector("[data-class-settings-dialog]"),
+  addForm: document.querySelector("[data-class-add-form]"),
+  managementList: document.querySelector("[data-class-management-list]"),
+  importDialog: document.querySelector("[data-class-import-dialog]"),
+  importForm: document.querySelector("[data-class-import-form]"),
+  importJson: document.querySelector("[data-class-import-json]"),
+  importStatus: document.querySelector("[data-class-import-status]"),
+  sectionDialog: document.querySelector("[data-class-section-dialog]"),
+  sectionForm: document.querySelector("[data-class-section-form]"),
+  sectionDialogTitle: document.querySelector("[data-class-section-dialog-title]"),
+  status: document.querySelector("[data-class-status]")
+};
 const accountingElements = {
   equation: document.querySelector("[data-accounting-equation]"),
   date: document.querySelector("[data-accounting-date]"),
@@ -169,8 +195,17 @@ let categoryLedger = "spending";
 let workQuery = "";
 const sankeySimulationStorageKey = "lifePortal.financeSankeySimulations";
 const sankeySimulationEnabledKey = "lifePortal.financeSankeySimulationEnabled";
+const classStorageKey = "lifePortal.classes";
 let sankeySimulations = loadSankeySimulations();
 let sankeySimulationEnabled = localStorage.getItem(sankeySimulationEnabledKey) === "true";
+let classState = loadClassState();
+let classQuizIndex = 0;
+let classQuizOrder = [];
+let classQuizAnswered = false;
+let classQuizCorrect = 0;
+let editingClassSectionIndex = null;
+let monacoLoadPromise = null;
+const classCodeEditors = new Map();
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -932,7 +967,11 @@ function sankeyCategoryRows(kind, category) {
       ...row,
       ledger
     }))
-    .sort((a, b) => compareAppDates(b.date, a.date) || numberValue(b.amount) - numberValue(a.amount));
+    .sort((a, b) => (
+      (parseDateValue(b.date) ?? Number.NEGATIVE_INFINITY)
+      - (parseDateValue(a.date) ?? Number.NEGATIVE_INFINITY)
+      || numberValue(b.amount) - numberValue(a.amount)
+    ));
 }
 
 function openSankeyTransactions(kind, category) {
@@ -2159,6 +2198,705 @@ async function copyTextFromField(field) {
   document.execCommand("copy");
 }
 
+function defaultClassMaterial(name = "New Class") {
+  return {
+    className: name,
+    classDescription: "",
+    isCodingClass: false,
+    contentSections: [],
+    multipleChoiceQuestions: [],
+    openEndedQuestions: [],
+    studyPlan: [],
+    codingQuestions: [],
+    keyTerms: [],
+    summaries: [],
+    practiceTasks: []
+  };
+}
+
+function createClass(name = "New Class", material = null) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name,
+    material: material || defaultClassMaterial(name)
+  };
+}
+
+function loadClassState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(classStorageKey) || "null");
+    if (saved?.classes?.length) {
+      return saved;
+    }
+  } catch (error) {
+    // Fall through to a clean starter class.
+  }
+  const firstClass = createClass("Class");
+  return { activeClassId: firstClass.id, classes: [firstClass] };
+}
+
+function saveClassState() {
+  localStorage.setItem(classStorageKey, JSON.stringify(classState));
+}
+
+function activeClass() {
+  return classState.classes.find((item) => item.id === classState.activeClassId) || classState.classes[0] || null;
+}
+
+function materialForClass(classItem) {
+  const material = {
+    ...defaultClassMaterial(classItem?.name || "Class"),
+    ...(classItem?.material || {})
+  };
+  material.contentSections = Array.isArray(material.contentSections) ? material.contentSections : [];
+  material.multipleChoiceQuestions = Array.isArray(material.multipleChoiceQuestions) ? material.multipleChoiceQuestions : [];
+  material.openEndedQuestions = Array.isArray(material.openEndedQuestions) ? material.openEndedQuestions : [];
+  material.studyPlan = Array.isArray(material.studyPlan) ? material.studyPlan : [];
+  material.codingQuestions = Array.isArray(material.codingQuestions) ? material.codingQuestions : [];
+  material.keyTerms = Array.isArray(material.keyTerms) ? material.keyTerms : [];
+  material.summaries = Array.isArray(material.summaries) ? material.summaries : [];
+  material.practiceTasks = Array.isArray(material.practiceTasks) ? material.practiceTasks : [];
+  return material;
+}
+
+function normalizeTextArray(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => {
+    if (typeof item === "string") {
+      return item;
+    }
+    if (item && typeof item === "object") {
+      return item.text || item.title || item.term || item.summary || "";
+    }
+    return "";
+  }).filter(Boolean);
+}
+
+function normalizeContentSections(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((section, index) => ({
+    id: section?.id || `section-${Date.now()}-${index}`,
+    title: String(section?.title || section?.heading || `Section ${index + 1}`),
+    content: String(section?.content || section?.body || section?.explanation || "")
+  }));
+}
+
+function normalizeMultipleChoice(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((question, index) => {
+    const choices = Array.isArray(question?.choices)
+      ? question.choices
+      : Array.isArray(question?.options)
+        ? question.options
+        : [];
+    return {
+      id: question?.id || `mc-${Date.now()}-${index}`,
+      question: String(question?.question || question?.prompt || ""),
+      choices: choices.map(String).filter(Boolean),
+      answer: String(question?.answer || question?.correctAnswer || ""),
+      explanation: String(question?.explanation || question?.context || "")
+    };
+  }).filter((question) => question.question && question.choices.length >= 2 && question.answer);
+}
+
+function normalizeOpenEnded(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((question, index) => ({
+    id: question?.id || `open-${Date.now()}-${index}`,
+    question: String(question?.question || question?.prompt || ""),
+    modelAnswer: String(question?.modelAnswer || question?.answer || question?.explanation || ""),
+    explanation: String(question?.explanation || question?.context || "")
+  })).filter((question) => question.question);
+}
+
+function normalizeStudyPlan(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item, index) => ({
+    id: item?.id || `plan-${Date.now()}-${index}`,
+    title: String(item?.title || item?.day || item?.week || `Step ${index + 1}`),
+    tasks: normalizeTextArray(item?.tasks || item?.items || (typeof item === "string" ? [item] : [])),
+    focus: String(item?.focus || item?.description || "")
+  }));
+}
+
+function normalizeCodingQuestions(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((question, index) => ({
+    id: question?.id || `code-${Date.now()}-${index}`,
+    title: String(question?.title || `Coding Question ${index + 1}`),
+    prompt: String(question?.prompt || question?.question || ""),
+    starterCode: String(question?.starterCode || question?.starter_code || ""),
+    language: String(question?.language || "javascript"),
+    expectedSolution: String(question?.expectedSolution || question?.solution || question?.explanation || ""),
+    testCases: Array.isArray(question?.testCases) ? question.testCases : []
+  })).filter((question) => question.prompt || question.title);
+}
+
+function validateClassMaterial(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("JSON must be an object.");
+  }
+  if (!parsed.className || typeof parsed.className !== "string") {
+    throw new Error("Missing string field: className.");
+  }
+  const material = {
+    className: parsed.className,
+    classDescription: String(parsed.classDescription || ""),
+    isCodingClass: Boolean(parsed.isCodingClass),
+    contentSections: normalizeContentSections(parsed.contentSections),
+    multipleChoiceQuestions: normalizeMultipleChoice(parsed.multipleChoiceQuestions),
+    openEndedQuestions: normalizeOpenEnded(parsed.openEndedQuestions),
+    studyPlan: normalizeStudyPlan(parsed.studyPlan),
+    codingQuestions: normalizeCodingQuestions(parsed.codingQuestions),
+    keyTerms: normalizeTextArray(parsed.keyTerms),
+    summaries: normalizeTextArray(parsed.summaries),
+    practiceTasks: normalizeTextArray(parsed.practiceTasks)
+  };
+  return material;
+}
+
+function classPromptText(classItem) {
+  const className = classItem?.name || "this class";
+  const schema = {
+    className: "string",
+    classDescription: "string",
+    isCodingClass: "boolean",
+    contentSections: [{ title: "string", content: "string" }],
+    multipleChoiceQuestions: [{ question: "string", choices: ["string"], answer: "string", explanation: "string" }],
+    openEndedQuestions: [{ question: "string", modelAnswer: "string", explanation: "string" }],
+    studyPlan: [{ title: "string", focus: "string", tasks: ["string"] }],
+    codingQuestions: [{ title: "string", prompt: "string", starterCode: "string", language: "string", expectedSolution: "string", testCases: [{ input: "string", expectedOutput: "string" }] }],
+    keyTerms: ["string"],
+    summaries: ["string"],
+    practiceTasks: ["string"]
+  };
+  return [
+    `You are helping me create a learning portal for ${className}.`,
+    "Using all class materials I provide, generate study content in the following JSON format.",
+    "Include multiple-choice questions, open-ended questions, content sections, context/explanations, a study plan, key terms, summaries, practice tasks, and coding questions only if this is a coding/programming class.",
+    "Return only valid JSON. Do not include markdown.",
+    "",
+    JSON.stringify(schema, null, 2)
+  ].join("\n");
+}
+
+function showClassStatus(message) {
+  if (!classElements.status) {
+    return;
+  }
+  classElements.status.textContent = message;
+  classElements.status.hidden = false;
+  window.clearTimeout(showClassStatus.timeout);
+  showClassStatus.timeout = window.setTimeout(() => {
+    classElements.status.hidden = true;
+  }, 2200);
+}
+
+function resetClassQuiz(material) {
+  classQuizIndex = 0;
+  classQuizAnswered = false;
+  classQuizCorrect = 0;
+  classQuizOrder = (material?.multipleChoiceQuestions || []).map((_, index) => index);
+}
+
+function shuffleClassQuiz(material) {
+  resetClassQuiz(material);
+  for (let index = classQuizOrder.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [classQuizOrder[index], classQuizOrder[swapIndex]] = [classQuizOrder[swapIndex], classQuizOrder[index]];
+  }
+}
+
+function orderedClassQuestions(material) {
+  const questions = material.multipleChoiceQuestions || [];
+  if (classQuizOrder.length !== questions.length) {
+    classQuizOrder = questions.map((_, index) => index);
+  }
+  return classQuizOrder.map((index) => questions[index]).filter(Boolean);
+}
+
+function ClassHeader(classItem, material) {
+  classElements.tabs.replaceChildren(
+    ...classState.classes.map((classItem) => {
+      const button = document.createElement("button");
+      button.className = `class-tab${classItem.id === classState.activeClassId ? " is-active" : ""}`;
+      button.type = "button";
+      button.textContent = classItem.name;
+      button.addEventListener("click", () => {
+        classState.activeClassId = classItem.id;
+        resetClassQuiz(materialForClass(classItem));
+        saveClassState();
+        renderClassPage();
+      });
+      return button;
+    })
+  );
+  classElements.title.textContent = material.className || classItem.name;
+  classElements.description.textContent = material.classDescription || "No material imported yet. Copy the prompt, generate JSON with your class materials, then import it here.";
+}
+
+function classEmpty(title, text = "") {
+  const empty = document.createElement("div");
+  empty.className = "class-empty";
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const span = document.createElement("span");
+  span.textContent = text;
+  empty.append(strong, span);
+  return empty;
+}
+
+function AnswerOption(choice, question, choices, feedback, material) {
+  const button = document.createElement("button");
+  button.className = "class-choice";
+  button.type = "button";
+  button.textContent = choice;
+  button.disabled = classQuizAnswered;
+  button.addEventListener("click", () => {
+    classQuizAnswered = true;
+    const correct = String(choice).trim().toLowerCase() === String(question.answer).trim().toLowerCase();
+    if (correct) {
+      classQuizCorrect += 1;
+    }
+    for (const item of choices.querySelectorAll(".class-choice")) {
+      const isAnswer = item.textContent.trim().toLowerCase() === String(question.answer).trim().toLowerCase();
+      item.disabled = true;
+      item.classList.toggle("is-correct", isAnswer);
+      item.classList.toggle("is-incorrect", item === button && !correct);
+    }
+    feedback.replaceChildren();
+    feedback.hidden = false;
+    const result = document.createElement("strong");
+    result.textContent = correct ? "Correct" : `Answer: ${question.answer}`;
+    const explanation = document.createElement("span");
+    explanation.textContent = question.explanation || "No explanation included.";
+    const nextButton = document.createElement("button");
+    nextButton.className = "add-button save-budget";
+    nextButton.type = "button";
+    nextButton.textContent = classQuizIndex === orderedClassQuestions(material).length - 1 ? "Restart" : "Next";
+    nextButton.addEventListener("click", () => {
+      classQuizAnswered = false;
+      if (classQuizIndex === orderedClassQuestions(material).length - 1) {
+        resetClassQuiz(material);
+      } else {
+        classQuizIndex += 1;
+      }
+      LearnCard(material);
+    });
+    feedback.append(result, explanation, nextButton);
+    updateLearnProgress(material);
+  });
+  return button;
+}
+
+function updateLearnProgress(material) {
+  const questions = orderedClassQuestions(material);
+  if (!questions.length) {
+    classElements.quizProgress.textContent = "";
+    classElements.progressBar.style.width = "0%";
+    return;
+  }
+  classElements.quizProgress.textContent = `Question ${classQuizIndex + 1} of ${questions.length} · ${classQuizCorrect} correct`;
+  classElements.progressBar.style.width = `${((classQuizIndex + (classQuizAnswered ? 1 : 0)) / questions.length) * 100}%`;
+}
+
+function LearnCard(material) {
+  const questions = orderedClassQuestions(material);
+  if (!questions.length) {
+    updateLearnProgress(material);
+    classElements.quizBody.replaceChildren(classEmpty("No multiple-choice questions yet", "Import JSON with multipleChoiceQuestions to start Learn Mode."));
+    return;
+  }
+  classQuizIndex = Math.min(classQuizIndex, questions.length - 1);
+  const question = questions[classQuizIndex];
+  updateLearnProgress(material);
+
+  const card = document.createElement("article");
+  card.className = "class-question-card";
+  const prompt = document.createElement("div");
+  prompt.className = "class-quiz-prompt";
+  prompt.textContent = question.question;
+  const choices = document.createElement("div");
+  choices.className = "class-choice-list";
+  const feedback = document.createElement("div");
+  feedback.className = "class-feedback";
+  feedback.hidden = true;
+
+  for (const choice of question.choices) {
+    choices.append(AnswerOption(choice, question, choices, feedback, material));
+  }
+  card.append(prompt, choices, feedback);
+  classElements.quizBody.replaceChildren(card);
+}
+
+function ContentSectionsCard(material) {
+  const sections = material.contentSections || [];
+  if (!sections.length) {
+    classElements.sections.replaceChildren(classEmpty("No content sections yet", "Import JSON or add a section manually."));
+    return;
+  }
+  classElements.sections.replaceChildren(
+    ...sections.map((section, index) => {
+      const card = document.createElement("article");
+      card.className = "class-section-card";
+      const top = document.createElement("div");
+      top.className = "class-section-top";
+      const title = document.createElement("strong");
+      title.textContent = section.title || `Section ${index + 1}`;
+      const actions = document.createElement("div");
+      actions.className = "class-section-actions";
+      for (const [label, handler] of [
+        ["Edit", () => openClassSectionDialog(index)],
+        ["Up", () => moveClassSection(index, -1)],
+        ["Down", () => moveClassSection(index, 1)]
+      ]) {
+        const button = document.createElement("button");
+        button.className = "add-button";
+        button.type = "button";
+        button.textContent = label;
+        button.disabled = (label === "Up" && index === 0) || (label === "Down" && index === sections.length - 1);
+        button.addEventListener("click", handler);
+        actions.append(button);
+      }
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "delete-row";
+      deleteButton.type = "button";
+      deleteButton.textContent = "Delete";
+      deleteButton.setAttribute("aria-label", "Delete section");
+      deleteButton.addEventListener("click", () => deleteClassSection(index));
+      actions.append(deleteButton);
+      top.append(title, actions);
+      const content = document.createElement("p");
+      content.textContent = section.content || "";
+      card.append(top, content);
+      return card;
+    })
+  );
+}
+
+function OpenQuestionCard(question) {
+  const card = document.createElement("article");
+  card.className = "class-question-card";
+  const prompt = document.createElement("strong");
+  prompt.textContent = question.question;
+  const answer = document.createElement("textarea");
+  answer.className = "ledger-input class-textarea";
+  answer.placeholder = "Your answer";
+  const actions = document.createElement("div");
+  actions.className = "class-open-actions";
+  const reveal = document.createElement("button");
+  reveal.className = "add-button";
+  reveal.type = "button";
+  reveal.textContent = "Reveal answer";
+  const model = document.createElement("div");
+  model.className = "class-answer-box";
+  model.hidden = true;
+  const modelTitle = document.createElement("strong");
+  modelTitle.textContent = "Model answer";
+  const modelBody = document.createElement("span");
+  modelBody.textContent = [question.modelAnswer, question.explanation].filter(Boolean).join(" ") || "No model answer included.";
+  model.append(modelTitle, modelBody);
+  reveal.addEventListener("click", () => {
+    model.hidden = !model.hidden;
+    reveal.textContent = model.hidden ? "Reveal answer" : "Hide answer";
+  });
+  actions.append(reveal);
+  card.append(prompt, answer, actions, model);
+  return card;
+}
+
+function renderOpenQuestions(material) {
+  const questions = material.openEndedQuestions || [];
+  if (!questions.length) {
+    classElements.openQuestions.replaceChildren(classEmpty("No open questions yet", "Import JSON with openEndedQuestions to practice written responses."));
+    return;
+  }
+  classElements.openQuestions.replaceChildren(...questions.map(OpenQuestionCard));
+}
+
+function StudyPlanCard(material) {
+  const plan = material.studyPlan || [];
+  if (!plan.length) {
+    classElements.studyPlan.replaceChildren(classEmpty("No study plan yet", "Import JSON with a studyPlan array to organize review blocks."));
+    return;
+  }
+  classElements.studyPlan.replaceChildren(
+    ...plan.map((item) => {
+      const row = document.createElement("article");
+      row.className = "class-plan-item";
+      const title = document.createElement("strong");
+      title.textContent = item.title || "Study block";
+      row.append(title);
+      if (item.focus) {
+        const focus = document.createElement("div");
+        focus.className = "class-plan-focus";
+        focus.textContent = item.focus;
+        row.append(focus);
+      }
+      const tasks = document.createElement("div");
+      tasks.className = "class-task-list";
+      for (const task of item.tasks || []) {
+        const chip = document.createElement("span");
+        chip.className = "class-task-chip";
+        chip.textContent = task;
+        tasks.append(chip);
+      }
+      if (tasks.children.length) {
+        row.append(tasks);
+      }
+      return row;
+    })
+  );
+}
+
+function renderTermsAndPractice(material) {
+  const terms = material.keyTerms || [];
+  classElements.keyTerms.replaceChildren(
+    ...(terms.length ? terms.map((term) => {
+      const chip = document.createElement("span");
+      chip.className = "class-term-chip";
+      chip.textContent = term;
+      return chip;
+    }) : [classEmpty("No key terms yet", "Key terms appear here after import.")])
+  );
+  const items = [...(material.summaries || []), ...(material.practiceTasks || [])];
+  classElements.practice.replaceChildren(
+    ...(items.length ? items.map((item) => {
+      const row = document.createElement("article");
+      row.className = "class-practice-item";
+      const body = document.createElement("p");
+      body.textContent = item;
+      row.append(body);
+      return row;
+    }) : [])
+  );
+}
+
+function loadMonaco() {
+  if (window.monaco) {
+    return Promise.resolve(window.monaco);
+  }
+  if (monacoLoadPromise) {
+    return monacoLoadPromise;
+  }
+  monacoLoadPromise = new Promise((resolve, reject) => {
+    const loader = document.createElement("script");
+    loader.src = "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js";
+    loader.onload = () => {
+      window.require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs" } });
+      window.require(["vs/editor/editor.main"], () => resolve(window.monaco));
+    };
+    loader.onerror = () => reject(new Error("Monaco could not be loaded."));
+    document.head.append(loader);
+  });
+  return monacoLoadPromise;
+}
+
+function renderCodingFallback(container, question) {
+  const textarea = document.createElement("textarea");
+  textarea.className = "ledger-input class-code-fallback";
+  textarea.value = question.starterCode || "";
+  container.replaceChildren(textarea);
+}
+
+function renderClassCoding(material) {
+  for (const editor of classCodeEditors.values()) {
+    editor.dispose();
+  }
+  classCodeEditors.clear();
+  const questions = material.codingQuestions || [];
+  classElements.codingPanel.hidden = !material.isCodingClass;
+  if (!material.isCodingClass) {
+    classElements.codingQuestions.replaceChildren();
+    return;
+  }
+  if (!questions.length) {
+    classElements.codingQuestions.replaceChildren(classEmpty("No coding questions imported."));
+    return;
+  }
+  const cards = questions.map((question) => {
+    const card = document.createElement("article");
+    card.className = "class-coding-card";
+    const title = document.createElement("strong");
+    title.textContent = question.title;
+    const prompt = document.createElement("p");
+    prompt.textContent = question.prompt;
+    const editorHost = document.createElement("div");
+    editorHost.className = "class-code-editor";
+    const actions = document.createElement("div");
+    actions.className = "class-coding-actions";
+    const reveal = document.createElement("button");
+    reveal.className = "add-button";
+    reveal.type = "button";
+    reveal.textContent = "Reveal";
+    const solution = document.createElement("p");
+    solution.className = "class-answer";
+    solution.hidden = true;
+    solution.textContent = question.expectedSolution || "No solution included.";
+    reveal.addEventListener("click", () => {
+      solution.hidden = !solution.hidden;
+      reveal.textContent = solution.hidden ? "Reveal" : "Hide";
+    });
+    actions.append(reveal);
+    card.append(title, prompt, editorHost, actions, solution);
+    if (question.testCases?.length) {
+      const tests = document.createElement("ul");
+      tests.className = "class-tests";
+      for (const test of question.testCases) {
+        const item = document.createElement("li");
+        item.textContent = typeof test === "string"
+          ? test
+          : `${test.input || "input"} -> ${test.expectedOutput || test.expected || ""}`;
+        tests.append(item);
+      }
+      card.append(tests);
+    }
+    requestAnimationFrame(() => {
+      loadMonaco()
+        .then((monaco) => {
+          const editor = monaco.editor.create(editorHost, {
+            value: question.starterCode || "",
+            language: question.language || "javascript",
+            theme: "vs-dark",
+            minimap: { enabled: false },
+            automaticLayout: true,
+            fontSize: 13,
+            lineNumbersMinChars: 3,
+            scrollBeyondLastLine: false
+          });
+          classCodeEditors.set(question.id, editor);
+        })
+        .catch(() => renderCodingFallback(editorHost, question));
+    });
+    return card;
+  });
+  classElements.codingQuestions.replaceChildren(...cards);
+}
+
+function ClassSettingsModal() {
+  classElements.managementList.replaceChildren(
+    ...classState.classes.map((classItem) => {
+      const row = document.createElement("div");
+      row.className = "class-management-row";
+      const input = document.createElement("input");
+      input.className = "ledger-input";
+      input.value = classItem.name;
+      const actions = document.createElement("div");
+      actions.className = "class-management-actions";
+      const saveButton = document.createElement("button");
+      saveButton.className = "add-button";
+      saveButton.type = "button";
+      saveButton.textContent = "Save";
+      saveButton.addEventListener("click", () => {
+        const nextName = input.value.trim();
+        if (!nextName) {
+          return;
+        }
+        classItem.material = materialForClass(classItem);
+        classItem.name = nextName;
+        classItem.material.className = nextName;
+        saveClassState();
+        renderClassPage();
+        ClassSettingsModal();
+      });
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "delete-row";
+      deleteButton.type = "button";
+      deleteButton.textContent = "Delete";
+      deleteButton.setAttribute("aria-label", "Delete class");
+      deleteButton.disabled = classState.classes.length === 1;
+      deleteButton.addEventListener("click", () => {
+        if (classState.classes.length === 1 || !window.confirm(`Delete ${classItem.name}?`)) {
+          return;
+        }
+        classState.classes = classState.classes.filter((item) => item.id !== classItem.id);
+        if (classState.activeClassId === classItem.id) {
+          classState.activeClassId = classState.classes[0]?.id;
+        }
+        saveClassState();
+        renderClassPage();
+        ClassSettingsModal();
+      });
+      actions.append(saveButton, deleteButton);
+      row.append(input, actions);
+      return row;
+    })
+  );
+}
+
+function renderClassPage() {
+  const classItem = activeClass();
+  if (!classItem) {
+    classElements.quizBody.replaceChildren(classEmpty("No class selected", "Use Settings to add a class."));
+    return;
+  }
+  const material = materialForClass(classItem);
+  classItem.material = material;
+  ClassHeader(classItem, material);
+  LearnCard(material);
+  ContentSectionsCard(material);
+  renderOpenQuestions(material);
+  StudyPlanCard(material);
+  renderClassCoding(material);
+  renderTermsAndPractice(material);
+}
+
+function openClassSectionDialog(index = null) {
+  const classItem = activeClass();
+  if (!classItem) {
+    return;
+  }
+  classItem.material = materialForClass(classItem);
+  const sections = classItem.material.contentSections || [];
+  const section = index === null ? null : sections[index];
+  editingClassSectionIndex = index;
+  classElements.sectionForm.reset();
+  classElements.sectionDialogTitle.textContent = section ? "Edit Section" : "New Section";
+  classElements.sectionForm.elements.title.value = section?.title || "";
+  classElements.sectionForm.elements.content.value = section?.content || "";
+  classElements.sectionDialog.showModal();
+}
+
+function moveClassSection(index, direction) {
+  const classItem = activeClass();
+  if (!classItem) {
+    return;
+  }
+  classItem.material = materialForClass(classItem);
+  const sections = classItem.material.contentSections || [];
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= sections.length) {
+    return;
+  }
+  const [section] = sections.splice(index, 1);
+  sections.splice(nextIndex, 0, section);
+  saveClassState();
+  ContentSectionsCard(classItem.material);
+}
+
+function deleteClassSection(index) {
+  const classItem = activeClass();
+  if (!classItem || !window.confirm("Delete this section?")) {
+    return;
+  }
+  classItem.material = materialForClass(classItem);
+  classItem.material.contentSections.splice(index, 1);
+  saveClassState();
+  ContentSectionsCard(classItem.material);
+}
+
 function openBuilderBucketForm(bucket = null) {
   editingBuilderBucketId = bucket?.id || null;
   builderBucketForm.reset();
@@ -2733,6 +3471,9 @@ function showPage(page) {
   for (const link of pageLinks) {
     link.classList.toggle("is-active", link.dataset.pageLink === page);
   }
+  if (page === "class") {
+    renderClassPage();
+  }
 }
 
 function pageFromHash() {
@@ -2746,9 +3487,11 @@ function pageFromHash() {
           ? "assets"
           : location.hash === "#work"
             ? "work"
-            : location.hash === "#accounting"
-              ? "accounting"
-              : "finance";
+            : location.hash === "#class"
+              ? "class"
+              : location.hash === "#accounting"
+                ? "accounting"
+                : "finance";
 }
 
 for (const link of pageLinks) {
@@ -2770,6 +3513,152 @@ openAccountingButton.addEventListener("click", () => {
 document.querySelector("[data-open-budget-builder]").addEventListener("click", () => {
   showPage("budget-builder");
   location.hash = "#budget-builder";
+});
+
+document.querySelector("[data-open-class-settings]").addEventListener("click", () => {
+  ClassSettingsModal();
+  classElements.settingsDialog.showModal();
+});
+
+document.querySelector("[data-close-class-settings]").addEventListener("click", () => {
+  classElements.settingsDialog.close();
+});
+
+classElements.addForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(classElements.addForm);
+  const name = String(formData.get("name") || "").trim();
+  if (!name) {
+    return;
+  }
+  const classItem = createClass(name);
+  classState.classes.push(classItem);
+  classState.activeClassId = classItem.id;
+  classElements.addForm.reset();
+  saveClassState();
+  renderClassPage();
+  ClassSettingsModal();
+  showClassStatus("Class added.");
+});
+
+document.querySelector("[data-copy-class-prompt]").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const classItem = activeClass();
+  const original = button.textContent;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(classPromptText(classItem));
+    } else {
+      const field = document.createElement("textarea");
+      field.value = classPromptText(classItem);
+      document.body.append(field);
+      await copyTextFromField(field);
+      field.remove();
+    }
+    button.textContent = "Copied";
+    showClassStatus("Prompt copied.");
+  } catch (error) {
+    button.textContent = "Copy failed";
+  }
+  setTimeout(() => {
+    button.textContent = original;
+  }, 1400);
+});
+
+function ImportJsonModal() {
+  classElements.importJson.value = "";
+  classElements.importStatus.textContent = "";
+  classElements.importDialog.showModal();
+  classElements.importJson.focus();
+}
+
+document.querySelector("[data-open-class-import]").addEventListener("click", () => {
+  ImportJsonModal();
+});
+
+document.querySelector("[data-close-class-import]").addEventListener("click", () => {
+  classElements.importDialog.close();
+});
+
+classElements.importForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const classItem = activeClass();
+  if (!classItem) {
+    return;
+  }
+  try {
+    const parsed = JSON.parse(classElements.importJson.value);
+    const material = validateClassMaterial(parsed);
+    classItem.material = material;
+    classItem.name = material.className || classItem.name;
+    resetClassQuiz(material);
+    saveClassState();
+    classElements.importDialog.close();
+    renderClassPage();
+    showClassStatus("Class material imported.");
+  } catch (error) {
+    classElements.importStatus.textContent = error.message || "Invalid JSON.";
+  }
+});
+
+document.querySelector("[data-class-restart]").addEventListener("click", () => {
+  const classItem = activeClass();
+  if (!classItem) {
+    return;
+  }
+  const material = materialForClass(classItem);
+  resetClassQuiz(material);
+  LearnCard(material);
+});
+
+document.querySelector("[data-class-shuffle]").addEventListener("click", () => {
+  const classItem = activeClass();
+  if (!classItem) {
+    return;
+  }
+  const material = materialForClass(classItem);
+  shuffleClassQuiz(material);
+  LearnCard(material);
+});
+
+document.querySelector("[data-add-class-section]").addEventListener("click", () => openClassSectionDialog());
+
+document.querySelector("[data-close-class-section]").addEventListener("click", () => {
+  editingClassSectionIndex = null;
+  classElements.sectionDialog.close();
+});
+
+classElements.sectionForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const classItem = activeClass();
+  if (!classItem) {
+    return;
+  }
+  classItem.material = materialForClass(classItem);
+  const formData = new FormData(classElements.sectionForm);
+  const section = {
+    id: editingClassSectionIndex === null
+      ? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      : classItem.material.contentSections[editingClassSectionIndex]?.id,
+    title: String(formData.get("title") || "").trim(),
+    content: String(formData.get("content") || "").trim()
+  };
+  if (!section.title) {
+    return;
+  }
+  if (!Array.isArray(classItem.material.contentSections)) {
+    classItem.material.contentSections = [];
+  }
+  if (editingClassSectionIndex === null) {
+    classItem.material.contentSections.push(section);
+  } else {
+    classItem.material.contentSections[editingClassSectionIndex] = section;
+  }
+  editingClassSectionIndex = null;
+  saveClassState();
+  classElements.sectionDialog.close();
+  ContentSectionsCard(classItem.material);
+  showClassStatus("Section saved.");
 });
 
 document.querySelector("[data-add-work-application]").addEventListener("click", async () => {

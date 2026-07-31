@@ -93,7 +93,8 @@ main {
 .accounting-page,
 .debt-page,
 .assets-page,
-.work-page {
+.work-page,
+.class-page {
   width: 100%;
   padding: 28px 24px 0;
 }
@@ -413,6 +414,414 @@ h2 {
 .work-portal-cell a:focus-visible {
   color: var(--text-active);
   outline: none;
+}
+
+.class-header-card,
+.class-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 16px;
+}
+
+.class-header-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px;
+  margin-bottom: 18px;
+  position: relative;
+}
+
+.class-header-main {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.class-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.class-primary-action {
+  border-color: rgba(159, 252, 223, 0.56);
+}
+
+.class-tabs {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.class-tab {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--row-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.class-tab:hover,
+.class-tab:focus-visible,
+.class-tab.is-active {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-active);
+  outline: none;
+}
+
+.class-description {
+  max-width: 760px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.class-toast {
+  grid-column: 1 / -1;
+  color: var(--aquamarine);
+  font-size: 13px;
+}
+
+.class-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.class-main-column,
+.class-resource-column {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+
+.class-card-head {
+  align-items: start;
+  padding-bottom: 10px;
+}
+
+.class-card-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.class-card-head span,
+.class-import-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.class-quiz-actions,
+.class-section-actions,
+.class-management-actions,
+.class-open-actions,
+.class-coding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.class-small-button,
+.class-section-actions .add-button,
+.class-management-actions .add-button,
+.class-open-actions .add-button,
+.class-coding-actions .add-button {
+  min-height: 26px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.class-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.class-progress-track span {
+  display: block;
+  width: 0%;
+  height: 100%;
+  background: rgba(159, 252, 223, 0.72);
+}
+
+.class-quiz-body,
+.class-section-list,
+.class-question-list,
+.class-plan-list,
+.class-coding-list,
+.class-practice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.class-empty {
+  min-height: 96px;
+  padding: 16px;
+  border: 1px solid var(--row-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.class-empty strong {
+  color: var(--text-active);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.class-question-card,
+.class-section-card,
+.class-plan-item,
+.class-coding-card,
+.class-practice-item {
+  border: 1px solid var(--row-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.class-question-card {
+  display: grid;
+  gap: 12px;
+}
+
+.class-quiz-prompt {
+  color: var(--text-active);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.class-question-card strong,
+.class-section-card strong,
+.class-plan-item strong,
+.class-coding-card strong,
+.class-practice-item strong {
+  color: var(--text-active);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.class-question-card p,
+.class-section-card p,
+.class-plan-item p,
+.class-coding-card p,
+.class-practice-item p,
+.class-answer,
+.class-summary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.class-choice-list {
+  display: grid;
+  gap: 9px;
+}
+
+.class-choice {
+  width: 100%;
+  min-height: 50px;
+  padding: 12px;
+  border: 1px solid var(--row-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.018);
+  color: var(--text-active);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.class-choice:hover,
+.class-choice:focus-visible {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.045);
+  outline: none;
+}
+
+.class-choice.is-correct {
+  border-color: rgba(159, 252, 223, 0.7);
+  background: rgba(159, 252, 223, 0.08);
+  color: var(--aquamarine);
+}
+
+.class-choice.is-incorrect {
+  border-color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-active);
+  opacity: 0.72;
+}
+
+.class-feedback,
+.class-answer-box {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--row-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.class-feedback strong,
+.class-answer-box strong {
+  color: var(--text-active);
+  font-size: 14px;
+}
+
+.class-section-card {
+  display: grid;
+  gap: 9px;
+}
+
+.class-section-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.class-textarea {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+}
+
+.class-chip-list,
+.class-task-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.class-term-chip,
+.class-task-chip {
+  padding: 6px 9px;
+  border: 1px solid var(--row-line);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.class-plan-item {
+  display: grid;
+  gap: 8px;
+}
+
+.class-plan-focus {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.class-coding-panel {
+  margin-top: 18px;
+  margin-bottom: 30px;
+}
+
+.class-code-editor {
+  min-height: 260px;
+  border: 1px solid var(--row-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.class-code-fallback {
+  min-height: 220px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.class-tests {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.class-dialog {
+  width: min(680px, calc(100vw - 40px));
+}
+
+.class-import-dialog,
+.class-section-dialog {
+  width: min(800px, calc(100vw - 40px));
+}
+
+.class-add-form,
+.class-management-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.class-add-form {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.class-management-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(420px, calc(100vh - 260px));
+  overflow-y: auto;
+}
+
+.class-management-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.class-management-actions {
+  justify-content: flex-end;
+}
+
+.class-management-actions .delete-row,
+.class-section-actions .delete-row {
+  width: auto;
+  min-width: 54px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.class-import-json {
+  min-height: 340px;
+}
+
+.class-section-content {
+  min-height: 190px;
 }
 
 .sankey-dialog {
@@ -1820,6 +2229,16 @@ h2 {
     flex-direction: column;
   }
 
+  .class-header-card,
+  .class-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .class-header-actions,
+  .class-quiz-actions {
+    justify-content: flex-start;
+  }
+
   .work-search {
     width: min(100%, 360px);
   }
@@ -1840,6 +2259,16 @@ h2 {
   .accounting-summary,
   .accounting-columns,
   .work-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .class-tabs {
+    width: 100%;
+  }
+
+  .class-add-form,
+  .class-management-row,
+  .class-section-top {
     grid-template-columns: 1fr;
   }
 

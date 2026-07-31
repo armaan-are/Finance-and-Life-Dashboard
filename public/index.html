@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Life Portal</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -54,8 +55,17 @@
         </span>
         <span>Work</span>
       </a>
+      <a class="tab" href="#class" data-page-link="class">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 5.5h6.5a3 3 0 0 1 3 3V19a3 3 0 0 0-3-3H4z"/>
+            <path d="M20 5.5h-6.5a3 3 0 0 0-3 3V19a3 3 0 0 1 3-3H20z"/>
+          </svg>
+        </span>
+        <span>Class</span>
+      </a>
     </nav>
-    <main aria-label="Finance workspace">
+    <main aria-label="Life Portal workspace">
       <section class="finance-page page-view" data-page="finance" aria-labelledby="finance-title">
         <div class="finance-head">
           <h1 id="finance-title">Finance</h1>
@@ -333,7 +343,119 @@
           <div class="ledger-list work-list" data-work-list aria-label="Application tracker"></div>
         </section>
       </section>
+      <section class="class-page page-view" data-page="class" aria-labelledby="class-title" hidden>
+        <section class="ledger class-header-card" aria-label="Class dashboard header">
+          <div class="class-header-main">
+            <div class="class-tabs" data-class-tabs aria-label="Classes"></div>
+            <h1 id="class-title" data-class-title>Class</h1>
+            <div class="class-description" data-class-description>No material imported yet.</div>
+          </div>
+          <div class="class-header-actions">
+            <button class="add-button" type="button" data-open-class-settings>Settings</button>
+            <button class="add-button" type="button" data-copy-class-prompt>Copy Prompt</button>
+            <button class="add-button save-budget class-primary-action" type="button" data-open-class-import>Import</button>
+          </div>
+          <div class="class-toast" data-class-status hidden></div>
+        </section>
+        <div class="class-dashboard-grid">
+          <section class="class-main-column" aria-label="Learning">
+            <section class="ledger class-card class-learn-card" aria-labelledby="class-quiz-title">
+              <div class="ledger-head class-card-head">
+                <div>
+                  <h2 id="class-quiz-title">Learn Mode</h2>
+                  <span data-class-quiz-progress></span>
+                </div>
+                <div class="class-quiz-actions">
+                  <button class="add-button" type="button" data-class-restart>Restart</button>
+                  <button class="add-button" type="button" data-class-shuffle>Shuffle</button>
+                </div>
+              </div>
+              <div class="class-progress-track" aria-hidden="true">
+                <span data-class-progress-bar></span>
+              </div>
+              <div class="class-quiz-body" data-class-quiz-body></div>
+            </section>
+            <section class="ledger class-card" aria-labelledby="class-open-title">
+              <div class="ledger-head class-card-head">
+                <h2 id="class-open-title">Open Questions</h2>
+              </div>
+              <div class="class-question-list" data-class-open-questions></div>
+            </section>
+          </section>
+          <aside class="class-resource-column" aria-label="Class resources">
+            <section class="ledger class-card class-content" aria-labelledby="class-content-title">
+              <div class="ledger-head class-card-head">
+                <h2 id="class-content-title">Content Sections</h2>
+                <button class="add-button class-small-button" type="button" data-add-class-section>Add</button>
+              </div>
+              <div class="class-section-list" data-class-sections></div>
+            </section>
+            <section class="ledger class-card" aria-labelledby="class-plan-title">
+              <div class="ledger-head class-card-head">
+                <h2 id="class-plan-title">Study Plan</h2>
+              </div>
+              <div class="class-plan-list" data-class-study-plan></div>
+            </section>
+            <section class="ledger class-card" aria-labelledby="class-terms-title">
+              <div class="ledger-head class-card-head">
+                <h2 id="class-terms-title">Key Terms / Summary</h2>
+              </div>
+              <div class="class-chip-list" data-class-key-terms></div>
+              <div class="class-practice-list" data-class-practice></div>
+            </section>
+          </aside>
+        </div>
+        <section class="ledger class-coding-panel" aria-labelledby="class-coding-title" data-class-coding-panel hidden>
+          <div class="ledger-head">
+            <h2 id="class-coding-title">Coding Questions</h2>
+          </div>
+          <div class="class-coding-list" data-class-coding-questions></div>
+        </section>
+      </section>
     </main>
+    <dialog class="budget-dialog class-dialog" data-class-settings-dialog>
+      <div class="budget-dialog-head">
+        <h2>Classes</h2>
+        <button class="delete-row" type="button" data-close-class-settings aria-label="Close class settings">x</button>
+      </div>
+      <form class="class-add-form" data-class-add-form>
+        <input class="ledger-input" name="name" type="text" placeholder="Class name" required>
+        <button class="add-button save-budget" type="submit">Add</button>
+      </form>
+      <div class="class-management-list" data-class-management-list></div>
+    </dialog>
+    <dialog class="budget-dialog class-import-dialog" data-class-import-dialog>
+      <form class="budget-form" method="dialog" data-class-import-form>
+        <div class="budget-dialog-head">
+          <h2>Import Class JSON</h2>
+          <button class="delete-row" type="button" data-close-class-import aria-label="Close import">x</button>
+        </div>
+        <label class="builder-export-field">
+          <span>JSON</span>
+          <textarea class="ledger-input builder-export-json class-import-json" data-class-import-json></textarea>
+        </label>
+        <div class="class-import-hint">Paste the AI-generated JSON for the selected class. The import will validate the schema before saving.</div>
+        <p class="category-dialog-status" data-class-import-status></p>
+        <button class="add-button save-budget" type="submit">Validate and Import</button>
+      </form>
+    </dialog>
+    <dialog class="budget-dialog class-section-dialog" data-class-section-dialog>
+      <form class="budget-form" method="dialog" data-class-section-form>
+        <div class="budget-dialog-head">
+          <h2 data-class-section-dialog-title>Section</h2>
+          <button class="delete-row" type="button" data-close-class-section aria-label="Close section editor">x</button>
+        </div>
+        <label class="category-name-field">
+          <span>Title</span>
+          <input class="ledger-input" name="title" type="text" required>
+        </label>
+        <label class="builder-export-field">
+          <span>Content</span>
+          <textarea class="ledger-input builder-export-json class-section-content" name="content"></textarea>
+        </label>
+        <button class="add-button save-budget" type="submit">Save</button>
+      </form>
+    </dialog>
     <dialog class="budget-dialog assets-cash-dialog" data-assets-cash-dialog>
       <div class="budget-dialog-head">
         <h2>Cash Accounts</h2>
