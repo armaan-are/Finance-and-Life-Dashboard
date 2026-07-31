@@ -5,7 +5,10 @@ import { extname, isAbsolute, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
-const envPath = join(root, ".env");
+const configuredEnvPath = process.env.LIFE_PORTAL_ENV_PATH;
+const envPath = configuredEnvPath
+  ? (isAbsolute(configuredEnvPath) ? configuredEnvPath : resolve(root, configuredEnvPath))
+  : join(root, ".env");
 const publicDir = join(root, "public");
 const vendorFiles = {
   "/vendor/d3/d3.min.js": join(root, "node_modules", "d3", "dist", "d3.min.js"),
@@ -1219,6 +1222,8 @@ async function handleApi(request, response) {
   if (pathname === "/api/health") {
     sendJson(response, 200, {
       ok: true,
+      service: "life-portal",
+      pid: process.pid,
       database: dbPath
     });
     return true;
@@ -1777,7 +1782,7 @@ function sendStatic(request, response) {
 initDatabase();
 normalizeExistingDates();
 
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   try {
     if (await handleApi(request, response)) {
       return;
@@ -1788,7 +1793,22 @@ createServer(async (request, response) => {
     sendJson(response, 500, { error: error.message });
     return;
   }
-}).listen(port, "127.0.0.1", () => {
+});
+
+server.listen(port, "127.0.0.1", () => {
   console.log(`Life Portal running at http://127.0.0.1:${port}`);
   console.log(`SQLite database: ${dbPath}`);
 });
+
+function shutdown() {
+  server.close(() => {
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    process.exit(0);
+  }, 5_000).unref();
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

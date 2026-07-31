@@ -23,6 +23,22 @@ Open `localhost:3000`.
 
 The app creates `data/life-portal.sqlite` on first run. Keep `.env` and `data/` private.
 
+## macOS menu bar app
+
+Build the lightweight native launcher:
+
+```sh
+chmod +x scripts/build-macos-app.sh
+scripts/build-macos-app.sh
+```
+
+Open `dist/Life Portal.app`. It starts the local server, opens Life Portal in
+the default browser, stays available from its Dock icon, and adds an SF Symbol
+to the menu bar. Clicking the Dock icon again reopens the portal. Use the menu
+to open the portal or choose **Stop Server & Quit**. The built app bundles the
+server and web assets while keeping private runtime files in
+`~/Library/Application Support/Life Portal`.
+
 ## Plaid
 
 Add your Plaid keys to `.env`:
