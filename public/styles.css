@@ -1393,6 +1393,16 @@ h2 {
   text-align: right;
 }
 
+.ledger-input[type="date"] {
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+.ledger-input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.72;
+}
+
 .delete-row {
   width: 20px;
   height: 20px;

@@ -191,6 +191,8 @@ let plaidStatusText = "";
 let linkedPlaidItems = [];
 let plaidConfigured = false;
 let plaidSyncPromise = null;
+let plaidAccountsPromise = null;
+let plaidScriptPromise = null;
 let categoryLedger = "spending";
 let workQuery = "";
 const sankeySimulationStorageKey = "lifePortal.financeSankeySimulations";
@@ -292,9 +294,18 @@ function updateLedgerCategories(categories = {}) {
 function textInput(ledger, row, field, value) {
   const editor = document.createElement("input");
   editor.className = `ledger-input ${field}`;
-  editor.type = "text";
-  editor.value = value;
-  editor.addEventListener("blur", () => saveField(ledger, row.id, field, field === "date" ? normalizeDateText(editor.value) : editor.value));
+  editor.type = field === "date" ? "date" : "text";
+  editor.value = field === "date" ? dateInputValue(value) : value;
+  if (field === "date") {
+    editor.setAttribute("aria-label", `${ledger === "income" ? "Income" : "Spending"} date`);
+    editor.addEventListener("click", () => editor.showPicker?.());
+  }
+  editor.addEventListener(field === "date" ? "change" : "blur", () => saveField(
+    ledger,
+    row.id,
+    field,
+    field === "date" ? normalizeDateText(editor.value) : editor.value
+  ));
   editor.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       editor.blur();
@@ -412,6 +423,17 @@ function displayAppDate(value) {
   return normalizeDateText(value);
 }
 
+function dateInputValue(value) {
+  const date = parseAppDate(value);
+  if (!date) {
+    return "";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function daysBetween(startDate, endDate) {
   return Math.max((endDate.getTime() - startDate.getTime()) / 86_400_000, 0);
 }
@@ -446,11 +468,12 @@ function inDateRange(rowDate, startDate, endDate) {
 }
 
 async function saveField(ledger, id, field, value) {
-  await api(`/api/${ledger}/${id}`, {
+  const result = await api(`/api/${ledger}/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ [field]: value })
   });
-  renderCurrent();
+  financeData = { ...financeData, [ledger]: result[ledger] };
+  renderSummary(financeData);
 }
 
 function currentBudgetCategoryRows() {
@@ -3403,19 +3426,77 @@ async function syncPlaidTransactions() {
   return plaidSyncPromise;
 }
 
+function refreshPlaidAccounts() {
+  if (plaidAccountsPromise) {
+    return plaidAccountsPromise;
+  }
+
+  plaidAccountsPromise = api("/api/plaid/accounts")
+    .then((result) => {
+      financeData = { ...financeData, plaidAccounts: result.accounts || [] };
+      renderAssets();
+      if (assetsCashDialog?.open) {
+        renderAssetsCashDialog();
+      }
+      return result;
+    })
+    .catch(() => null)
+    .finally(() => {
+      plaidAccountsPromise = null;
+    });
+
+  return plaidAccountsPromise;
+}
+
+function loadPlaidScript() {
+  if (window.Plaid) {
+    return Promise.resolve(window.Plaid);
+  }
+  if (plaidScriptPromise) {
+    return plaidScriptPromise;
+  }
+
+  plaidScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
+    script.onload = () => resolve(window.Plaid);
+    script.onerror = () => reject(new Error("Plaid Link could not be loaded."));
+    document.head.append(script);
+  }).catch((error) => {
+    plaidScriptPromise = null;
+    throw error;
+  });
+
+  return plaidScriptPromise;
+}
+
 async function renderCurrent(options = {}) {
-  render(await api("/api/finance"));
+  const data = await api("/api/finance");
+  if (!financeLedgerIsEditing()) {
+    render(data);
+  }
 
   if (options.syncPlaid) {
     syncPlaidTransactions().then(async (result) => {
       if (result) {
-        render(await api("/api/finance"));
+        const refreshedData = await api("/api/finance");
+        if (!financeLedgerIsEditing()) {
+          render(refreshedData);
+        }
       }
     }).catch(() => {
       plaidStatusText = "Plaid check failed";
       renderPlaidButton(plaidStatusText);
     });
   }
+
+  if (options.refreshPlaidAccounts) {
+    refreshPlaidAccounts();
+  }
+}
+
+function financeLedgerIsEditing() {
+  return Boolean(document.activeElement?.closest('[data-page="finance"] [data-ledger-list]'));
 }
 
 for (const button of document.querySelectorAll("[data-add-ledger]")) {
@@ -4052,17 +4133,16 @@ linkBankButton.addEventListener("click", async () => {
   plaidStatus.textContent = "Starting Plaid...";
 
   try {
-    if (!window.Plaid) {
-      plaidStatusText = "Plaid Link unavailable";
-      renderPlaidButton(plaidStatusText);
-      return;
-    }
-
     const tokenResult = await api("/api/plaid/link-token", { method: "POST" });
     if (!tokenResult.configured) {
       plaidStatusText = "Plaid not configured";
       renderPlaidButton(plaidStatusText);
       return;
+    }
+
+    await loadPlaidScript();
+    if (!window.Plaid) {
+      throw new Error("Plaid Link unavailable");
     }
 
     const handler = window.Plaid.create({
@@ -4076,7 +4156,7 @@ linkBankButton.addEventListener("click", async () => {
           });
           linkedPlaidItems = exchangeResult.linkedItems || [];
           plaidStatusText = "";
-          await renderCurrent({ syncPlaid: true });
+          await renderCurrent({ syncPlaid: true, refreshPlaidAccounts: true });
         } catch (error) {
           plaidStatusText = "Plaid Link failed";
           renderPlaidButton(plaidStatusText);
@@ -4154,4 +4234,7 @@ window.addEventListener("hashchange", () => {
 
 const initialPage = pageFromHash();
 showPage(initialPage);
-renderCurrent({ syncPlaid: initialPage === "finance" });
+renderCurrent({
+  syncPlaid: initialPage === "finance",
+  refreshPlaidAccounts: true
+});

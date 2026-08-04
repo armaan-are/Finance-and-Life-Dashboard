@@ -1241,11 +1241,15 @@ async function handleApi(request, response) {
       plaidTransactions: listPlaidTransactions(),
       plaidSkippedTransactions: listSkippedPlaidTransactions(),
       plaidItems: listPlaidItems(),
-      plaidAccounts: await listPlaidAccounts(),
       plaidConfigured: getPlaidConfig().configured,
       workApplications: listWorkApplications(),
       workStatuses
     });
+    return true;
+  }
+
+  if (pathname === "/api/plaid/accounts" && request.method === "GET") {
+    sendJson(response, 200, { accounts: await listPlaidAccounts() });
     return true;
   }
 
