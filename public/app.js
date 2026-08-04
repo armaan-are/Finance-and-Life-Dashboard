@@ -3240,24 +3240,172 @@ function renderCategoryBreakdown(categoryTotals) {
   );
 }
 
-function renderDonut(categoryTotals, totalSpending) {
-  if (totalSpending <= 0) {
-    summaryElements.donutChart.style.background = "rgba(255, 255, 255, 0.12)";
+const chartNamespace = "http://www.w3.org/2000/svg";
+
+function chartElement(tagName, attributes = {}) {
+  const element = document.createElementNS(chartNamespace, tagName);
+  for (const [name, value] of Object.entries(attributes)) {
+    element.setAttribute(name, value);
+  }
+  return element;
+}
+
+function donutArcPath(centerX, centerY, outerRadius, innerRadius, startAngle, endAngle) {
+  const point = (radius, angle) => ({
+    x: centerX + Math.cos(angle) * radius,
+    y: centerY + Math.sin(angle) * radius
+  });
+  const outerStart = point(outerRadius, startAngle);
+  const outerEnd = point(outerRadius, endAngle);
+  const innerEnd = point(innerRadius, endAngle);
+  const innerStart = point(innerRadius, startAngle);
+  if (endAngle - startAngle >= Math.PI * 2 - 0.000001) {
+    const outerMiddle = point(outerRadius, startAngle + Math.PI);
+    const innerMiddle = point(innerRadius, startAngle + Math.PI);
+    return [
+      `M ${outerStart.x} ${outerStart.y}`,
+      `A ${outerRadius} ${outerRadius} 0 1 1 ${outerMiddle.x} ${outerMiddle.y}`,
+      `A ${outerRadius} ${outerRadius} 0 1 1 ${outerStart.x} ${outerStart.y}`,
+      `L ${innerStart.x} ${innerStart.y}`,
+      `A ${innerRadius} ${innerRadius} 0 1 0 ${innerMiddle.x} ${innerMiddle.y}`,
+      `A ${innerRadius} ${innerRadius} 0 1 0 ${innerStart.x} ${innerStart.y}`,
+      "Z"
+    ].join(" ");
+  }
+  const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
+    "Z"
+  ].join(" ");
+}
+
+function spreadChartLabels(labels, minimumY, maximumY) {
+  if (!labels.length) {
     return;
   }
 
-  let cursor = 0;
-  const shades = ["#ffffff", "#e9edf2", "#d3d9e0", "#bac3cc", "#a4adb7", "#8d98a3"];
-  const segments = Object.entries(categoryTotals)
-    .filter(([, amount]) => amount > 0)
-    .map(([category, amount], index) => {
-      const start = cursor;
-      const end = cursor + (amount / totalSpending) * 100;
-      cursor = end;
-      return `${shades[index % shades.length]} ${start}% ${end}%`;
-    });
+  const gap = Math.min(28, (maximumY - minimumY) / Math.max(1, labels.length - 1));
+  labels.sort((a, b) => a.anchorY - b.anchorY);
+  labels[0].labelY = Math.max(minimumY, labels[0].anchorY);
 
-  summaryElements.donutChart.style.background = `conic-gradient(${segments.join(", ")})`;
+  for (let index = 1; index < labels.length; index += 1) {
+    labels[index].labelY = Math.max(labels[index].anchorY, labels[index - 1].labelY + gap);
+  }
+
+  const overflow = labels.at(-1).labelY - maximumY;
+  if (overflow > 0) {
+    for (const label of labels) {
+      label.labelY -= overflow;
+    }
+  }
+
+  for (let index = labels.length - 2; index >= 0; index -= 1) {
+    labels[index].labelY = Math.min(labels[index].labelY, labels[index + 1].labelY - gap);
+  }
+}
+
+function renderDonut(categoryTotals, totalSpending) {
+  const width = 390;
+  const height = 250;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const outerRadius = 70;
+  const innerRadius = 39;
+  const shades = ["#ffffff", "#e9edf2", "#d3d9e0", "#bac3cc", "#a4adb7", "#8d98a3"];
+  const categories = Object.entries(categoryTotals).filter(([, amount]) => amount > 0);
+  const svg = chartElement("svg", {
+    viewBox: `0 0 ${width} ${height}`,
+    role: "img",
+    "aria-labelledby": "spending-chart-title spending-chart-description"
+  });
+  const title = chartElement("title", { id: "spending-chart-title" });
+  title.textContent = "Spending by category";
+  const description = chartElement("desc", { id: "spending-chart-description" });
+  description.textContent = categories.length && totalSpending > 0
+    ? categories.map(([category, amount]) => `${category} ${((amount / totalSpending) * 100).toFixed(1)}%`).join(", ")
+    : "No spending data";
+  svg.append(title, description);
+
+  if (totalSpending <= 0 || !categories.length) {
+    svg.append(chartElement("circle", {
+      cx: centerX,
+      cy: centerY,
+      r: outerRadius,
+      fill: "rgba(255, 255, 255, 0.12)"
+    }));
+    svg.append(chartElement("circle", {
+      cx: centerX,
+      cy: centerY,
+      r: innerRadius,
+      fill: "var(--page)"
+    }));
+    summaryElements.donutChart.replaceChildren(svg);
+    return;
+  }
+
+  let cursor = -Math.PI / 2;
+  const labels = [];
+  categories.forEach(([category, amount], index) => {
+    const startAngle = cursor;
+    const endAngle = cursor + (amount / totalSpending) * Math.PI * 2;
+    const middleAngle = startAngle + (endAngle - startAngle) / 2;
+    cursor = endAngle;
+
+    svg.append(chartElement("path", {
+      d: donutArcPath(centerX, centerY, outerRadius, innerRadius, startAngle, endAngle),
+      fill: shades[index % shades.length]
+    }));
+
+    labels.push({
+      category,
+      percentage: (amount / totalSpending) * 100,
+      side: Math.cos(middleAngle) >= 0 ? "right" : "left",
+      anchorX: centerX + Math.cos(middleAngle) * (outerRadius - 2),
+      anchorY: centerY + Math.sin(middleAngle) * (outerRadius - 2)
+    });
+  });
+
+  spreadChartLabels(labels.filter((label) => label.side === "left"), 18, height - 18);
+  spreadChartLabels(labels.filter((label) => label.side === "right"), 18, height - 18);
+
+  for (const label of labels) {
+    const isRight = label.side === "right";
+    const elbowX = centerX + (isRight ? outerRadius + 16 : -outerRadius - 16);
+    const lineEndX = isRight ? width - 7 : 7;
+    const text = chartElement("text", {
+      x: isRight ? width - 4 : 4,
+      y: label.labelY - 2,
+      "text-anchor": isRight ? "end" : "start",
+      class: "donut-label"
+    });
+    const name = chartElement("tspan", { x: isRight ? width - 4 : 4 });
+    name.textContent = label.category;
+    const percentage = chartElement("tspan", {
+      x: isRight ? width - 4 : 4,
+      dy: 13,
+      class: "donut-percentage"
+    });
+    percentage.textContent = `${label.percentage.toFixed(1)}%`;
+
+    svg.append(chartElement("polyline", {
+      points: `${label.anchorX},${label.anchorY} ${elbowX},${label.labelY} ${lineEndX},${label.labelY}`,
+      class: "donut-leader-line"
+    }));
+    svg.append(chartElement("circle", {
+      cx: label.anchorX,
+      cy: label.anchorY,
+      r: 2.6,
+      class: "donut-leader-dot"
+    }));
+    text.append(name, percentage);
+    svg.append(text);
+  }
+
+  summaryElements.donutChart.replaceChildren(svg);
 }
 
 function renderSummary(data) {
