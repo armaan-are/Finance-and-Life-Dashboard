@@ -761,6 +761,28 @@ function listPlaidTransactions() {
   ));
 }
 
+function listPlaidAccountTransactions() {
+  const output = runSql(
+    `SELECT plaid_transaction_id AS plaidTransactionId,
+            account_id AS accountId,
+            name,
+            merchant_name AS merchantName,
+            amount,
+            date,
+            iso_currency_code AS isoCurrencyCode,
+            pending,
+            reviewed_at AS reviewedAt,
+            skipped_at AS skippedAt,
+            ledger_type AS ledgerType,
+            ledger_id AS ledgerId
+     FROM plaid_transactions
+     ORDER BY date ASC, id ASC;`,
+    { json: true }
+  ).trim();
+
+  return output ? JSON.parse(output) : [];
+}
+
 function listSkippedPlaidTransactions() {
   const output = runSql(
     `SELECT id,
@@ -1384,6 +1406,7 @@ async function handleApi(request, response) {
       loans: listLoans(),
       graduationDate: getPortalMeta("graduation_date"),
       plaidTransactions: listPlaidTransactions(),
+      plaidAccountTransactions: listPlaidAccountTransactions(),
       plaidSkippedTransactions: listSkippedPlaidTransactions(),
       plaidItems: listPlaidItems(),
       plaidConfigured: getPlaidConfig().configured,

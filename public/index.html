@@ -43,7 +43,7 @@
             <path d="M17 7.5c-1-1-2.5-1.5-4.5-1.5-2.4 0-4 1.1-4 2.8 0 1.8 1.8 2.4 3.9 2.8 2.4.5 4.3 1 4.3 3 0 1.8-1.7 3.1-4.4 3.1-2.1 0-3.8-.6-5.1-1.9"/>
           </svg>
         </span>
-        <span>Assets</span>
+        <span>Assets &amp;<br>Spending</span>
       </a>
       <a class="tab" href="#work" data-page-link="work">
         <span class="tab-icon" aria-hidden="true">
@@ -278,20 +278,76 @@
           </section>
         </div>
       </section>
-      <section class="assets-page page-view" data-page="assets" aria-labelledby="assets-title" hidden>
+      <section class="assets-page page-view" data-page="assets" aria-labelledby="assets-spending-title" hidden>
         <div class="finance-head">
-          <h1 id="assets-title">Assets</h1>
+          <h1 id="assets-spending-title">Assets &amp; Spending</h1>
+          <div class="assets-range" role="group" aria-label="Assets and spending chart date range">
+            <button type="button" data-assets-range="30d" aria-pressed="false">30D</button>
+            <button type="button" data-assets-range="90d" aria-pressed="false">90D</button>
+            <button class="is-active" type="button" data-assets-range="1y" aria-pressed="true">1Y</button>
+            <button type="button" data-assets-range="all" aria-pressed="false">All</button>
+          </div>
         </div>
-        <section class="asset-icon-row" aria-label="Asset totals">
+        <section class="asset-icon-row assets-overview" aria-label="Assets and spending totals">
           <button class="asset-icon-metric" type="button" data-open-assets-cash>
-            <div class="asset-line-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M12 3v18"/>
-                <path d="M17 7.5c-1-1-2.5-1.5-4.5-1.5-2.4 0-4 1.1-4 2.8 0 1.8 1.8 2.4 3.9 2.8 2.4.5 4.3 1 4.3 3 0 1.8-1.7 3.1-4.4 3.1-2.1 0-3.8-.6-5.1-1.9"/>
-              </svg>
-            </div>
+            <span>Cash</span>
             <strong data-assets-cash-total>$0.00</strong>
           </button>
+          <div class="asset-overview-metric">
+            <span>Net Worth</span>
+            <strong data-assets-net-worth>$0.00</strong>
+          </div>
+          <div class="asset-overview-metric">
+            <span>Total Debt</span>
+            <strong data-assets-debt>$0.00</strong>
+          </div>
+          <div class="asset-overview-metric">
+            <span>Range Spending</span>
+            <strong data-assets-range-spending>$0.00</strong>
+          </div>
+        </section>
+        <section class="assets-chart-grid" aria-label="Assets and spending analytics">
+          <article class="assets-chart-card assets-chart-wide">
+            <div class="assets-chart-head">
+              <div>
+                <h2>Estimated Net Worth</h2>
+                <p>Connected account activity and dated loans</p>
+              </div>
+              <strong data-assets-net-worth-change>—</strong>
+            </div>
+            <div class="assets-chart assets-net-worth-chart" data-assets-net-worth-chart></div>
+          </article>
+          <article class="assets-chart-card">
+            <div class="assets-chart-head">
+              <div>
+                <h2>Account Balances</h2>
+                <p>Current connected account snapshot</p>
+              </div>
+            </div>
+            <div class="assets-chart" data-assets-balances-chart></div>
+          </article>
+          <article class="assets-chart-card">
+            <div class="assets-chart-head">
+              <div>
+                <h2>Cash Flow</h2>
+                <p>Income compared with spending</p>
+              </div>
+              <div class="assets-chart-legend" aria-label="Cash flow chart legend">
+                <span>Income</span>
+                <span>Spending</span>
+              </div>
+            </div>
+            <div class="assets-chart" data-assets-cash-flow-chart></div>
+          </article>
+          <article class="assets-chart-card assets-chart-wide">
+            <div class="assets-chart-head">
+              <div>
+                <h2>Spending by Category</h2>
+                <p>Largest categories in the selected range</p>
+              </div>
+            </div>
+            <div class="assets-chart assets-spending-chart" data-assets-spending-chart></div>
+          </article>
         </section>
       </section>
       <section class="work-page page-view" data-page="work" aria-labelledby="work-title" hidden>
