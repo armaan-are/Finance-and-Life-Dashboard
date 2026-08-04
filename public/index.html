@@ -73,9 +73,8 @@
             <span data-plaid-status></span>
             <button class="add-button" type="button" data-open-accounting>Accounting</button>
             <button class="add-button" type="button" data-open-finance-sankey>Sankey</button>
-            <button class="add-button" type="button" data-link-bank>Link Bank</button>
             <button class="add-button" type="button" data-open-plaid-review hidden>Review Plaid</button>
-            <button class="add-button" type="button" data-open-plaid-skipped>Skipped Plaid</button>
+            <button class="add-button" type="button" data-open-plaid-manager>Plaid Manager</button>
           </div>
         </div>
         <section class="finance-summary" aria-label="Financial data">
@@ -745,6 +744,30 @@
         <p class="category-dialog-status" data-category-status></p>
         <button class="add-button save-budget" type="submit" data-save-category>Create Category</button>
       </form>
+    </dialog>
+    <dialog class="budget-dialog plaid-manager-dialog" data-plaid-manager-dialog>
+      <div class="budget-dialog-head">
+        <div>
+          <h2>Plaid</h2>
+          <p class="plaid-manager-subtitle" data-plaid-manager-overview>Manage connected banks and imports</p>
+        </div>
+        <button class="delete-row" type="button" data-close-plaid-manager aria-label="Close Plaid manager">x</button>
+      </div>
+      <div class="plaid-manager-summary" data-plaid-manager-stats></div>
+      <div class="plaid-manager-section-head">
+        <h3>Accounts</h3>
+        <span data-plaid-manager-account-status></span>
+      </div>
+      <div class="plaid-account-list" data-plaid-account-list></div>
+      <div class="plaid-manager-section-head">
+        <h3>Bank connections</h3>
+      </div>
+      <div class="plaid-connection-list" data-plaid-connection-list></div>
+      <div class="plaid-manager-actions">
+        <button class="add-button save-budget" type="button" data-link-bank>Link another bank</button>
+        <button class="add-button" type="button" data-refresh-plaid-accounts>Refresh</button>
+        <button class="plaid-text-button" type="button" data-open-plaid-skipped>Skipped transactions</button>
+      </div>
     </dialog>
     <dialog class="budget-dialog plaid-dialog" data-plaid-dialog>
       <form class="budget-form" method="dialog" data-plaid-form>

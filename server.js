@@ -671,6 +671,70 @@ function insertWorkStatusHistory(applicationId, status, note = "") {
   );
 }
 
+function normalizePlaidTransactionText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function plaidTransactionFingerprint(transaction) {
+  const merchant = normalizePlaidTransactionText(
+    transaction.merchantName || transaction.merchant_name || transaction.name
+  );
+  if (!merchant) {
+    return "";
+  }
+
+  const amount = Math.abs(Number(transaction.amount || 0)).toFixed(2);
+  const date = normalizeDate(transaction.date || "");
+  const ledger = transaction.suggestedLedger
+    || transaction.suggested_ledger
+    || plaidLedgerForAmount(transaction.amount);
+  return [date, amount, ledger, merchant].join("|");
+}
+
+function filterPlaidReviewDuplicates(rows) {
+  const handledAccountsByFingerprint = new Map();
+  for (const row of rows) {
+    if (!row.reviewedAt && !row.skippedAt) {
+      continue;
+    }
+    const fingerprint = plaidTransactionFingerprint(row);
+    if (!fingerprint) {
+      continue;
+    }
+    const accounts = handledAccountsByFingerprint.get(fingerprint) || new Set();
+    accounts.add(row.accountId || "");
+    handledAccountsByFingerprint.set(fingerprint, accounts);
+  }
+
+  const queuedAccountsByFingerprint = new Map();
+  return rows.filter((row) => {
+    if (row.reviewedAt || row.skippedAt) {
+      return false;
+    }
+    const fingerprint = plaidTransactionFingerprint(row);
+    if (!fingerprint) {
+      return true;
+    }
+    const accountId = row.accountId || "";
+    const handledAccounts = handledAccountsByFingerprint.get(fingerprint) || new Set();
+    if ([...handledAccounts].some((existingAccountId) => existingAccountId !== accountId)) {
+      return false;
+    }
+    const queuedAccounts = queuedAccountsByFingerprint.get(fingerprint) || new Set();
+    if ([...queuedAccounts].some((existingAccountId) => existingAccountId !== accountId)) {
+      return false;
+    }
+    queuedAccounts.add(accountId);
+    queuedAccountsByFingerprint.set(fingerprint, queuedAccounts);
+    return true;
+  });
+}
+
 function listPlaidTransactions() {
   const output = runSql(
     `SELECT id,
@@ -683,15 +747,18 @@ function listPlaidTransactions() {
             iso_currency_code AS isoCurrencyCode,
             pending,
             suggested_ledger AS suggestedLedger,
-            description
+            description,
+            reviewed_at AS reviewedAt,
+            skipped_at AS skippedAt
      FROM plaid_transactions
-     WHERE reviewed_at = ''
-       AND skipped_at = ''
-     ORDER BY date ASC, id ASC;`,
+     ORDER BY id ASC;`,
     { json: true }
   ).trim();
 
-  return output ? JSON.parse(output) : [];
+  const rows = output ? JSON.parse(output) : [];
+  return filterPlaidReviewDuplicates(rows).sort((a, b) => (
+    String(a.date || "").localeCompare(String(b.date || "")) || a.id - b.id
+  ));
 }
 
 function listSkippedPlaidTransactions() {
@@ -873,23 +940,63 @@ async function requestPlaidAccountBalances(config, accessToken) {
 
 async function listPlaidAccounts() {
   const config = getPlaidConfig();
-  const accessTokens = listPlaidAccessTokens();
+  const output = runSql(
+    `SELECT item_id AS itemId,
+            access_token AS accessToken,
+            institution_id AS institutionId,
+            institution_name AS institutionName
+     FROM plaid_items
+     ORDER BY id ASC;`,
+    { json: true }
+  ).trim();
+  const connections = output ? JSON.parse(output) : [];
+  const fallbackAccessToken = process.env.PLAID_ACCESS_TOKEN || "";
 
-  if (!config.configured || !accessTokens.length) {
-    return [];
+  if (fallbackAccessToken && !connections.some((item) => item.accessToken === fallbackAccessToken)) {
+    connections.push({
+      itemId: "",
+      accessToken: fallbackAccessToken,
+      institutionId: "",
+      institutionName: "Plaid"
+    });
   }
 
-  const accountGroups = await Promise.all(accessTokens.map(async (accessToken) => {
+  if (!config.configured || !connections.length) {
+    return { accounts: [], connections: [] };
+  }
+
+  const accountGroups = await Promise.all(connections.map(async (connection) => {
     try {
-      return await requestPlaidAccountBalances(config, accessToken);
-    } catch {
-      return [];
+      const accounts = await requestPlaidAccountBalances(config, connection.accessToken);
+      return {
+        accounts: accounts.map((account) => ({ account, connection })),
+        connection: {
+          itemId: connection.itemId || "",
+          institutionId: connection.institutionId || "",
+          institutionName: connection.institutionName || "Plaid",
+          status: "connected",
+          accountCount: accounts.length
+        }
+      };
+    } catch (error) {
+      return {
+        accounts: [],
+        connection: {
+          itemId: connection.itemId || "",
+          institutionId: connection.institutionId || "",
+          institutionName: connection.institutionName || "Plaid",
+          status: "needs_attention",
+          accountCount: 0
+        }
+      };
     }
   }));
 
-  return accountGroups.flat().map((account) => ({
+  const accounts = accountGroups.flatMap((group) => group.accounts).map(({ account, connection }) => ({
     accountId: account.account_id || "",
     name: account.name || account.official_name || "",
+    institutionId: connection.institutionId || "",
+    institutionName: connection.institutionName || "Plaid",
     type: account.type || "",
     subtype: account.subtype || "",
     balances: {
@@ -898,6 +1005,11 @@ async function listPlaidAccounts() {
       isoCurrencyCode: account.balances?.iso_currency_code || ""
     }
   }));
+
+  return {
+    accounts,
+    connections: accountGroups.map((group) => group.connection)
+  };
 }
 
 function queuePlaidTransaction(transaction) {
@@ -907,6 +1019,39 @@ function queuePlaidTransaction(transaction) {
 
   const amount = Math.abs(Number(transaction.amount || 0)).toFixed(2);
   const suggestedLedger = plaidLedgerForAmount(transaction.amount);
+  const date = normalizeDate(transaction.date || "");
+  const accountId = transaction.account_id || "";
+  const fingerprint = plaidTransactionFingerprint({
+    ...transaction,
+    amount,
+    date,
+    suggested_ledger: suggestedLedger
+  });
+  const possibleDuplicatesOutput = runSql(
+    `SELECT plaid_transaction_id AS plaidTransactionId,
+            account_id AS accountId,
+            name,
+            merchant_name AS merchantName,
+            amount,
+            date,
+            suggested_ledger AS suggestedLedger
+     FROM plaid_transactions
+     WHERE date = ${sqlString(date)}
+       AND amount = ${sqlString(amount)}
+       AND suggested_ledger = ${sqlString(suggestedLedger)};`,
+    { json: true }
+  ).trim();
+  const possibleDuplicates = possibleDuplicatesOutput ? JSON.parse(possibleDuplicatesOutput) : [];
+  const isReconnectDuplicate = fingerprint && possibleDuplicates.some((existing) => (
+    existing.plaidTransactionId !== transaction.transaction_id
+    && existing.accountId !== accountId
+    && plaidTransactionFingerprint(existing) === fingerprint
+  ));
+
+  if (isReconnectDuplicate) {
+    return false;
+  }
+
   runSql(
     `INSERT INTO plaid_transactions (
        plaid_transaction_id,
@@ -922,11 +1067,11 @@ function queuePlaidTransaction(transaction) {
      )
      VALUES (
        ${sqlString(transaction.transaction_id)},
-       ${sqlString(transaction.account_id || "")},
+       ${sqlString(accountId)},
        ${sqlString(transaction.name || "")},
        ${sqlString(transaction.merchant_name || "")},
        ${sqlString(amount)},
-       ${sqlString(normalizeDate(transaction.date || ""))},
+       ${sqlString(date)},
        ${sqlString(transaction.iso_currency_code || "")},
        ${transaction.pending ? 1 : 0},
        ${sqlString(suggestedLedger)},
@@ -1249,7 +1394,7 @@ async function handleApi(request, response) {
   }
 
   if (pathname === "/api/plaid/accounts" && request.method === "GET") {
-    sendJson(response, 200, { accounts: await listPlaidAccounts() });
+    sendJson(response, 200, await listPlaidAccounts());
     return true;
   }
 

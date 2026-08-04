@@ -2040,6 +2040,228 @@ h2 {
   width: min(560px, calc(100vw - 40px));
 }
 
+.plaid-manager-dialog {
+  width: min(680px, calc(100vw - 40px));
+}
+
+.plaid-manager-subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.plaid-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.plaid-text-button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.plaid-text-button:hover {
+  color: var(--text-active);
+}
+
+.plaid-manager-summary {
+  display: flex;
+  align-items: center;
+  padding: 14px 0;
+  border-block: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.plaid-manager-summary > div {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 18px;
+}
+
+.plaid-manager-summary > div:first-child {
+  padding-left: 0;
+}
+
+.plaid-manager-summary > div + div {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.plaid-manager-summary span,
+.plaid-manager-section-head span,
+.plaid-account-identity span,
+.plaid-account-balances span,
+.plaid-connection-row span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.plaid-manager-summary strong {
+  color: var(--text-active);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.plaid-manager-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plaid-manager-section-head h3 {
+  margin: 0;
+  color: var(--text-active);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.plaid-account-list {
+  display: grid;
+  max-height: min(300px, 38vh);
+  overflow-y: auto;
+  border-block: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.plaid-account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 2px;
+}
+
+.plaid-account-row + .plaid-account-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.plaid-account-identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.plaid-account-identity strong {
+  overflow: hidden;
+  color: var(--text-active);
+  font-size: 15px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plaid-account-balances {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(90px, auto));
+  gap: 18px;
+  text-align: right;
+}
+
+.plaid-account-balances > div {
+  display: grid;
+  gap: 3px;
+}
+
+.plaid-account-balances strong {
+  color: var(--text-active);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.plaid-account-kind {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.plaid-account-kind-credit,
+.plaid-account-kind-loan {
+  color: #f1c3bb;
+  background: rgba(226, 132, 115, 0.1);
+}
+
+.plaid-account-empty {
+  padding: 18px 2px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.plaid-connection-list {
+  display: grid;
+}
+
+.plaid-connection-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 48px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.plaid-connection-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-active) !important;
+  font-size: 12px !important;
+  font-weight: 600;
+}
+
+.plaid-connection-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.plaid-connection-row strong {
+  color: var(--text-active);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.plaid-connection-status {
+  position: relative;
+  padding-left: 12px;
+  white-space: nowrap;
+}
+
+.plaid-connection-status::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.plaid-connection-status-connected::before {
+  background: #75d8ad;
+}
+
+.plaid-connection-status-needs_attention {
+  color: #e0a59a !important;
+}
+
+.plaid-connection-status-needs_attention::before {
+  background: #dc8d7e;
+}
+
 .plaid-review-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2376,10 +2598,45 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .plaid-manager-summary {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .plaid-manager-summary > div,
+  .plaid-manager-summary > div:first-child {
+    padding: 0;
+  }
+
+  .plaid-manager-summary > div + div {
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 0;
+  }
+
   .plaid-skip-row,
+  .plaid-account-row,
   .plaid-dialog-actions {
+    grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .plaid-account-balances {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    text-align: left;
+  }
+
+  .plaid-manager-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plaid-text-button {
+    margin-left: 0;
+    padding: 8px 0;
+    text-align: left;
   }
 
   .plaid-skip-button,

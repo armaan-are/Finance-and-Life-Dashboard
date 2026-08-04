@@ -73,7 +73,15 @@ const budgetsScroll = document.querySelector("[data-budgets-scroll]");
 const plaidStatus = document.querySelector("[data-plaid-status]");
 const linkBankButton = document.querySelector("[data-link-bank]");
 const plaidReviewButton = document.querySelector("[data-open-plaid-review]");
+const plaidManagerButton = document.querySelector("[data-open-plaid-manager]");
 const plaidSkippedButton = document.querySelector("[data-open-plaid-skipped]");
+const plaidManagerDialog = document.querySelector("[data-plaid-manager-dialog]");
+const plaidManagerStats = document.querySelector("[data-plaid-manager-stats]");
+const plaidManagerOverview = document.querySelector("[data-plaid-manager-overview]");
+const plaidManagerAccountStatus = document.querySelector("[data-plaid-manager-account-status]");
+const plaidAccountList = document.querySelector("[data-plaid-account-list]");
+const plaidConnectionList = document.querySelector("[data-plaid-connection-list]");
+const refreshPlaidAccountsButton = document.querySelector("[data-refresh-plaid-accounts]");
 const plaidSkippedCount = document.querySelector("[data-plaid-skipped-count]");
 const plaidSkippedList = document.querySelector("[data-plaid-skipped-list]");
 const plaidDialog = document.querySelector("[data-plaid-dialog]");
@@ -189,9 +197,11 @@ let skippedPlaidTransactions = [];
 let activePlaidIndex = 0;
 let plaidStatusText = "";
 let linkedPlaidItems = [];
+let plaidConnections = [];
 let plaidConfigured = false;
 let plaidSyncPromise = null;
 let plaidAccountsPromise = null;
+let plaidAccountsStatus = "";
 let plaidScriptPromise = null;
 let categoryLedger = "spending";
 let workQuery = "";
@@ -3475,16 +3485,149 @@ function render(data) {
 function renderPlaidButton(statusText = "") {
   const count = pendingPlaidTransactions.length;
   const linkedCount = linkedPlaidItems.length;
+  const connectedCount = plaidConnections.filter((connection) => connection.status === "connected").length;
+  const attentionCount = plaidConnections.filter((connection) => connection.status === "needs_attention").length;
   plaidReviewButton.hidden = count === 0;
   plaidReviewButton.textContent = count === 1 ? "Review 1 Plaid" : `Review ${count} Plaid`;
   plaidStatus.textContent = statusText || (
     count
       ? `${count} Plaid transaction${count === 1 ? "" : "s"} ready`
+      : attentionCount
+        ? `${connectedCount} connected · ${attentionCount} need attention`
       : linkedCount
-        ? `${linkedCount} bank account${linkedCount === 1 ? "" : "s"} linked`
+        ? `${linkedCount} bank${linkedCount === 1 ? "" : "s"} linked`
         : plaidConfigured
           ? "No bank linked"
           : "Plaid not configured"
+  );
+}
+
+function plaidAccountBalance(account, field) {
+  const value = account?.balances?.[field];
+  return value === null || value === undefined || value === "" ? null : numberValue(value);
+}
+
+function renderPlaidManager() {
+  const accounts = financeData.plaidAccounts || [];
+  const connections = plaidConnections.length ? plaidConnections : linkedPlaidItems.map((item) => ({
+    ...item,
+    status: "checking",
+    accountCount: 0
+  }));
+  const connectedCount = connections.filter((connection) => connection.status === "connected").length;
+  const attentionCount = connections.filter((connection) => connection.status === "needs_attention").length;
+  const availableCash = accounts
+    .filter((account) => account.type === "depository")
+    .reduce((total, account) => total + cashBalanceForAccount(account), 0);
+  const debt = accounts
+    .filter((account) => account.type === "credit" || account.type === "loan")
+    .reduce((total, account) => total + (plaidAccountBalance(account, "current") || 0), 0);
+
+  plaidManagerOverview.textContent = attentionCount
+    ? `${connectedCount} connected · ${attentionCount} need attention`
+    : `${connectedCount} bank connection${connectedCount === 1 ? "" : "s"}`;
+  plaidManagerStats.replaceChildren();
+  for (const [label, value] of [
+    ["Available cash", money(availableCash)],
+    ["Credit & loan balance", money(debt)],
+    ["Skipped", skippedPlaidTransactions.length]
+  ]) {
+    const stat = document.createElement("div");
+    const name = document.createElement("span");
+    const amount = document.createElement("strong");
+    name.textContent = label;
+    amount.textContent = value;
+    stat.append(name, amount);
+    plaidManagerStats.append(stat);
+  }
+
+  plaidManagerAccountStatus.textContent = plaidAccountsStatus || (
+    accounts.length ? `${accounts.length} account${accounts.length === 1 ? "" : "s"}` : "No accounts loaded"
+  );
+  plaidSkippedButton.textContent = skippedPlaidTransactions.length
+    ? `Skipped transactions (${skippedPlaidTransactions.length})`
+    : "Skipped transactions";
+
+  plaidAccountList.replaceChildren(
+    ...accounts.map((account) => {
+      const row = document.createElement("div");
+      row.className = "plaid-account-row";
+
+      const identity = document.createElement("div");
+      identity.className = "plaid-account-identity";
+      const name = document.createElement("strong");
+      name.textContent = account.name || "Bank Account";
+      const meta = document.createElement("span");
+      meta.textContent = [
+        account.institutionName,
+        account.subtype || account.type
+      ].filter(Boolean).join(" · ");
+      identity.append(name, meta);
+
+      const kind = document.createElement("span");
+      kind.className = `plaid-account-kind plaid-account-kind-${account.type || "other"}`;
+      kind.textContent = account.type === "credit" || account.type === "loan" ? "Owed" : "Balance";
+
+      const balances = document.createElement("div");
+      balances.className = "plaid-account-balances";
+      for (const [label, value] of [
+        ["Available", plaidAccountBalance(account, "available")],
+        ["Current", plaidAccountBalance(account, "current")]
+      ]) {
+        const item = document.createElement("div");
+        const caption = document.createElement("span");
+        const amount = document.createElement("strong");
+        caption.textContent = label;
+        amount.textContent = value === null ? "—" : money(value);
+        item.append(caption, amount);
+        balances.append(item);
+      }
+
+      row.append(identity, kind, balances);
+      return row;
+    })
+  );
+
+  if (!accounts.length) {
+    const empty = document.createElement("div");
+    empty.className = "plaid-account-empty";
+    empty.textContent = connections.length
+      ? "Connected account balances are unavailable right now."
+      : "Link a bank to see its accounts and balances here.";
+    plaidAccountList.append(empty);
+  }
+
+  plaidConnectionList.replaceChildren(
+    ...connections.map((connection) => {
+      const row = document.createElement("div");
+      row.className = "plaid-connection-row";
+
+      const mark = document.createElement("span");
+      mark.className = "plaid-connection-mark";
+      mark.textContent = (connection.institutionName || "P").slice(0, 1).toUpperCase();
+
+      const body = document.createElement("div");
+      const name = document.createElement("strong");
+      const detail = document.createElement("span");
+      name.textContent = connection.institutionName || "Plaid connection";
+      detail.textContent = connection.status === "connected"
+        ? `${connection.accountCount} account${connection.accountCount === 1 ? "" : "s"} available`
+        : connection.status === "needs_attention"
+          ? "Reconnect this bank to restore access"
+          : "Checking connection";
+      body.append(name, detail);
+
+      const status = document.createElement("span");
+      status.className = `plaid-connection-status plaid-connection-status-${connection.status}`;
+      status.textContent = connection.status === "connected"
+        ? "Connected"
+        : connection.status === "needs_attention"
+          ? "Needs attention"
+          : "Checking";
+
+      row.append(mark, body, status);
+      return row;
+    })
   );
 }
 
@@ -3579,16 +3722,32 @@ function refreshPlaidAccounts() {
     return plaidAccountsPromise;
   }
 
+  plaidAccountsStatus = "Refreshing...";
+  if (plaidManagerDialog.open) {
+    renderPlaidManager();
+  }
   plaidAccountsPromise = api("/api/plaid/accounts")
     .then((result) => {
       financeData = { ...financeData, plaidAccounts: result.accounts || [] };
+      plaidConnections = result.connections || [];
+      plaidAccountsStatus = "";
       renderAssets();
+      renderPlaidButton(plaidStatusText);
+      if (plaidManagerDialog.open) {
+        renderPlaidManager();
+      }
       if (assetsCashDialog?.open) {
         renderAssetsCashDialog();
       }
       return result;
     })
-    .catch(() => null)
+    .catch(() => {
+      plaidAccountsStatus = "Refresh failed";
+      if (plaidManagerDialog.open) {
+        renderPlaidManager();
+      }
+      return null;
+    })
     .finally(() => {
       plaidAccountsPromise = null;
     });
@@ -4251,6 +4410,7 @@ function openPlaidReview(index = 0) {
 }
 
 function openPlaidSkipped() {
+  plaidManagerDialog.close();
   renderPlaidSkippedTransactions();
   plaidSkippedDialog.showModal();
 }
@@ -4275,9 +4435,16 @@ async function refreshPlaidState(result, reopen = true) {
 
 plaidReviewButton.addEventListener("click", () => openPlaidReview());
 plaidSkippedButton.addEventListener("click", () => openPlaidSkipped());
+plaidManagerButton.addEventListener("click", () => {
+  renderPlaidManager();
+  plaidManagerDialog.showModal();
+  refreshPlaidAccounts();
+});
+refreshPlaidAccountsButton.addEventListener("click", () => refreshPlaidAccounts());
 
 linkBankButton.addEventListener("click", async () => {
   linkBankButton.disabled = true;
+  plaidManagerDialog.close();
   plaidStatus.textContent = "Starting Plaid...";
 
   try {
@@ -4330,6 +4497,10 @@ linkBankButton.addEventListener("click", async () => {
 
 document.querySelector("[data-close-plaid]").addEventListener("click", () => {
   plaidDialog.close();
+});
+
+document.querySelector("[data-close-plaid-manager]").addEventListener("click", () => {
+  plaidManagerDialog.close();
 });
 
 document.querySelector("[data-close-plaid-skipped]").addEventListener("click", () => {
