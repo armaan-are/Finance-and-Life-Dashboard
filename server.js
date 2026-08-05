@@ -618,6 +618,43 @@ function cachedPlaidAccountResponse(cache, stale = cache.stale) {
   };
 }
 
+function readPlaidInvestmentCache() {
+  const payloadText = getPortalMeta("plaid_investment_cache");
+  if (!payloadText) return null;
+  try {
+    const payload = JSON.parse(payloadText);
+    if (!Array.isArray(payload.accounts) || !Array.isArray(payload.holdings) || !Array.isArray(payload.securities)) {
+      return null;
+    }
+    return {
+      payload,
+      refreshedOn: getPortalMeta("plaid_investment_cache_date"),
+      refreshedAt: getPortalMeta("plaid_investment_cache_time"),
+      stale: getPortalMeta("plaid_investment_cache_stale") === "true"
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePlaidInvestmentCache(payload, { stale = false } = {}) {
+  const now = new Date();
+  setPortalMeta("plaid_investment_cache", JSON.stringify(payload));
+  setPortalMeta("plaid_investment_cache_date", localCalendarDate(now));
+  setPortalMeta("plaid_investment_cache_time", now.toISOString());
+  setPortalMeta("plaid_investment_cache_stale", String(stale));
+}
+
+function cachedPlaidInvestmentResponse(cache, stale = cache.stale) {
+  return {
+    ...cache.payload,
+    cached: true,
+    stale,
+    refreshedOn: cache.refreshedOn,
+    refreshedAt: cache.refreshedAt
+  };
+}
+
 function listLoans() {
   const output = runSql(
     `SELECT id,
@@ -1006,6 +1043,108 @@ async function requestPlaidAccountBalances(config, accessToken) {
   return Array.isArray(payload.accounts) ? payload.accounts : [];
 }
 
+async function requestPlaidInvestmentHoldings(config, accessToken) {
+  const response = await fetch(`${config.host}/investments/holdings/get`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    signal: AbortSignal.timeout(8000),
+    body: JSON.stringify({
+      client_id: config.clientId,
+      secret: config.secret,
+      access_token: accessToken
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const error = new Error(payload.error_message || payload.error_code || `Plaid investments failed: ${response.status}`);
+    error.code = payload.error_code || "";
+    throw error;
+  }
+
+  return payload;
+}
+
+async function listPlaidInvestments({ force = false } = {}) {
+  const cache = readPlaidInvestmentCache();
+  const today = localCalendarDate();
+  if (!force && cache?.refreshedOn === today) {
+    return cachedPlaidInvestmentResponse(cache);
+  }
+
+  const config = getPlaidConfig();
+  const connections = listPlaidSyncItems();
+  if (!config.configured || !connections.length) {
+    return cache
+      ? cachedPlaidInvestmentResponse(cache, true)
+      : { accounts: [], holdings: [], securities: [], cached: false, stale: false, refreshedOn: "", refreshedAt: "" };
+  }
+
+  const results = await Promise.all(connections.map(async (connection) => {
+    try {
+      return { payload: await requestPlaidInvestmentHoldings(config, connection.accessToken), failed: false };
+    } catch (error) {
+      const emptyItem = ["NO_INVESTMENT_ACCOUNTS", "PRODUCT_NOT_ENABLED"].includes(error.code);
+      return { payload: { accounts: [], holdings: [], securities: [] }, failed: !emptyItem };
+    }
+  }));
+  const failed = results.some((result) => result.failed);
+  const accountIds = new Set();
+  const securityIds = new Set();
+  const payload = { accounts: [], holdings: [], securities: [] };
+  for (const result of results) {
+    for (const account of result.payload.accounts || []) {
+      if (account.type !== "investment" || accountIds.has(account.account_id)) continue;
+      accountIds.add(account.account_id);
+      payload.accounts.push({
+        accountId: account.account_id || "",
+        name: account.name || account.official_name || "Investment account",
+        officialName: account.official_name || "",
+        type: account.type || "investment",
+        subtype: account.subtype || "",
+        balances: {
+          available: account.balances?.available ?? null,
+          current: account.balances?.current ?? null,
+          isoCurrencyCode: account.balances?.iso_currency_code || ""
+        }
+      });
+    }
+    for (const holding of result.payload.holdings || []) {
+      payload.holdings.push({
+        accountId: holding.account_id || "",
+        securityId: holding.security_id || "",
+        quantity: holding.quantity ?? 0,
+        institutionPrice: holding.institution_price ?? null,
+        institutionValue: holding.institution_value ?? null,
+        costBasis: holding.cost_basis ?? null,
+        isoCurrencyCode: holding.iso_currency_code || ""
+      });
+    }
+    for (const security of result.payload.securities || []) {
+      if (securityIds.has(security.security_id)) continue;
+      securityIds.add(security.security_id);
+      payload.securities.push({
+        securityId: security.security_id || "",
+        name: security.name || "Security",
+        tickerSymbol: security.ticker_symbol || "",
+        type: security.type || "",
+        closePrice: security.close_price ?? null,
+        closePriceAsOf: security.close_price_as_of || "",
+        isoCurrencyCode: security.iso_currency_code || ""
+      });
+    }
+  }
+
+  if (!failed || payload.accounts.length || payload.holdings.length) {
+    writePlaidInvestmentCache(payload, { stale: failed });
+    const refreshed = readPlaidInvestmentCache();
+    return { ...payload, cached: false, stale: failed, refreshedOn: refreshed?.refreshedOn || today, refreshedAt: refreshed?.refreshedAt || "" };
+  }
+  return cache
+    ? cachedPlaidInvestmentResponse(cache, true)
+    : { ...payload, cached: false, stale: true, refreshedOn: "", refreshedAt: "" };
+}
+
 async function listPlaidAccounts({ force = false } = {}) {
   const cache = readPlaidAccountCache();
   const today = localCalendarDate();
@@ -1329,7 +1468,7 @@ async function syncPlaidTransactions({ force = false } = {}) {
   });
 }
 
-async function createPlaidLinkToken() {
+async function createPlaidLinkToken(purpose = "banking") {
   const config = getPlaidConfig();
 
   if (!config.configured) {
@@ -1345,7 +1484,7 @@ async function createPlaidLinkToken() {
       client_name: "Life Portal",
       country_codes: ["US"],
       language: "en",
-      products: ["transactions"],
+      products: purpose === "investments" ? ["investments"] : ["transactions"],
       user: {
         client_user_id: process.env.PLAID_CLIENT_USER_ID || "life-portal-local-user"
       }
@@ -1358,7 +1497,7 @@ async function createPlaidLinkToken() {
     throw new Error(message);
   }
 
-  return { configured: true, environment: config.environment, linkToken: payload.link_token };
+  return { configured: true, environment: config.environment, purpose, linkToken: payload.link_token };
 }
 
 async function exchangePlaidPublicToken(publicToken, metadata = {}) {
@@ -1528,6 +1667,7 @@ async function handleApi(request, response) {
 
   if (pathname === "/api/finance" && request.method === "GET") {
     const plaidAccountCache = readPlaidAccountCache();
+    const plaidInvestmentCache = readPlaidInvestmentCache();
     sendJson(response, 200, {
       spending: listLedger("spending"),
       income: listLedger("income"),
@@ -1543,6 +1683,8 @@ async function handleApi(request, response) {
       plaidAccounts: plaidAccountCache?.payload.accounts || [],
       plaidConnections: plaidAccountCache?.payload.connections || [],
       plaidAccountsRefreshedOn: plaidAccountCache?.refreshedOn || "",
+      plaidInvestments: plaidInvestmentCache?.payload || { accounts: [], holdings: [], securities: [] },
+      plaidInvestmentsRefreshedOn: plaidInvestmentCache?.refreshedOn || "",
       plaidConfigured: getPlaidConfig().configured,
       workApplications: listWorkApplications(),
       workStatuses
@@ -1552,6 +1694,11 @@ async function handleApi(request, response) {
 
   if (pathname === "/api/plaid/accounts" && request.method === "GET") {
     sendJson(response, 200, await listPlaidAccounts({ force: requestUrl.searchParams.get("force") === "1" }));
+    return true;
+  }
+
+  if (pathname === "/api/plaid/investments" && request.method === "GET") {
+    sendJson(response, 200, await listPlaidInvestments({ force: requestUrl.searchParams.get("force") === "1" }));
     return true;
   }
 
@@ -1669,7 +1816,8 @@ async function handleApi(request, response) {
   }
 
   if (pathname === "/api/plaid/link-token" && request.method === "POST") {
-    sendJson(response, 200, await createPlaidLinkToken());
+    const body = await readBody(request);
+    sendJson(response, 200, await createPlaidLinkToken(body.purpose === "investments" ? "investments" : "banking"));
     return true;
   }
 

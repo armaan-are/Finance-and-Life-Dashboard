@@ -417,6 +417,82 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.assets-portfolio-card {
+  padding-right: 24px;
+  border-right: 1px solid var(--line);
+}
+
+.assets-portfolio-card + .assets-chart-card {
+  padding-left: 24px;
+}
+
+.assets-link-investment {
+  flex: 0 0 auto;
+}
+
+.assets-portfolio-summary {
+  display: grid;
+  gap: 4px;
+  margin-top: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.assets-portfolio-summary strong {
+  color: var(--text-active);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.assets-portfolio-summary span,
+.assets-portfolio-row span,
+.assets-portfolio-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.assets-portfolio-list {
+  min-height: 214px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.assets-portfolio-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.assets-portfolio-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.assets-portfolio-row > div:last-child {
+  text-align: right;
+}
+
+.assets-portfolio-row strong {
+  overflow: hidden;
+  color: var(--text-active);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assets-portfolio-empty {
+  min-height: 190px;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+}
+
 .assets-chart-head {
   min-height: 43px;
   display: flex;
@@ -2915,6 +2991,13 @@ h2 {
 
   .assets-chart-wide {
     grid-column: auto;
+  }
+
+  .assets-portfolio-card,
+  .assets-portfolio-card + .assets-chart-card {
+    padding-right: 0;
+    padding-left: 0;
+    border-right: 0;
   }
 
   .category-trend-grid,

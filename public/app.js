@@ -110,6 +110,11 @@ const assetsMonthlySpendingChart = document.querySelector("[data-assets-monthly-
 const assetsBalancesChart = document.querySelector("[data-assets-balances-chart]");
 const assetsCategoryTrends = document.querySelector("[data-assets-category-trends]");
 const assetsInsights = document.querySelector("[data-assets-insights]");
+const assetsInvestmentTotal = document.querySelector("[data-assets-investment-total]");
+const assetsInvestmentCount = document.querySelector("[data-assets-investment-count]");
+const assetsInvestmentStatus = document.querySelector("[data-assets-investment-status]");
+const assetsPortfolioList = document.querySelector("[data-assets-portfolio-list]");
+const linkInvestmentButton = document.querySelector("[data-link-investment]");
 const assetsRangeButtons = document.querySelectorAll("[data-assets-range]");
 const assetsNormalizeButton = document.querySelector("[data-assets-normalize]");
 const workList = document.querySelector("[data-work-list]");
@@ -198,7 +203,7 @@ const workSummaryElements = {
   offers: document.querySelector("[data-work-offers]"),
   responseRate: document.querySelector("[data-work-response-rate]")
 };
-let financeData = { spending: [], income: [], budgets: [], loans: [], graduationDate: "", plaidAccounts: [], plaidAccountTransactions: [], workApplications: [], workStatuses: defaultWorkStatuses };
+let financeData = { spending: [], income: [], budgets: [], loans: [], graduationDate: "", plaidAccounts: [], plaidAccountTransactions: [], plaidInvestments: { accounts: [], holdings: [], securities: [] }, workApplications: [], workStatuses: defaultWorkStatuses };
 let editingBudgetId = null;
 let deletingBudgetId = null;
 let editingBuilderBucketId = null;
@@ -214,6 +219,7 @@ let plaidConnections = [];
 let plaidConfigured = false;
 let plaidSyncPromise = null;
 let plaidAccountsPromise = null;
+let plaidInvestmentsPromise = null;
 let plaidAccountsStatus = "";
 let plaidScriptPromise = null;
 let categoryLedger = "spending";
@@ -762,7 +768,12 @@ function accountIsDebt(account) {
 }
 
 function connectedAssetsTotal() {
-  return (financeData.plaidAccounts || []).reduce((total, account) => (
+  const accounts = [...(financeData.plaidAccounts || [])];
+  const accountIds = new Set(accounts.map((account) => account.accountId).filter(Boolean));
+  for (const account of financeData.plaidInvestments?.accounts || []) {
+    if (!accountIds.has(account.accountId)) accounts.push(account);
+  }
+  return accounts.reduce((total, account) => (
     accountIsDebt(account) ? total : total + assetAccountBalance(account)
   ), 0);
 }
@@ -843,6 +854,9 @@ function assetsDataSignature() {
     add(account?.balances?.isoCurrencyCode);
   }
   addRows(financeData.plaidAccountTransactions, ["plaidTransactionId", "accountId", "amount", "date", "pending"]);
+  addRows(financeData.plaidInvestments?.accounts, ["accountId", "name", "subtype"]);
+  addRows(financeData.plaidInvestments?.holdings, ["accountId", "securityId", "quantity", "institutionPrice", "institutionValue", "costBasis"]);
+  addRows(financeData.plaidInvestments?.securities, ["securityId", "name", "tickerSymbol", "type", "closePrice"]);
   addRows(financeData.spending, ["id", "category", "amount", "date"]);
   addRows(financeData.income, ["id", "category", "amount", "date"]);
   addRows(financeData.loans, ["id", "issuedDate", "subsidyType", "interestRate", "principal"]);
@@ -985,42 +999,7 @@ function spendingRowsInAssetRange() {
     ));
 }
 
-function monthlySpendingBuckets() {
-  const rows = spendingRowsInAssetRange();
-  if (!rows.length) {
-    return { rows: [], completedAverage: 0 };
-  }
-  const today = startOfDay(new Date());
-  const currentMonth = d3.timeMonth.floor(today);
-  const firstDate = d3.min(rows, (row) => parseAppDate(row.date));
-  const firstMonth = d3.timeMonth.floor(firstDate);
-  const monthStarts = d3.timeMonth.range(firstMonth, d3.timeMonth.offset(currentMonth, 1));
-  const key = d3.timeFormat("%Y-%m");
-  const buckets = new Map(monthStarts.map((date) => [key(date), { date, value: 0, income: 0, byCategory: new Map() }]));
-  for (const row of rows) {
-    const bucket = buckets.get(key(parseAppDate(row.date)));
-    if (!bucket) continue;
-    const amount = numberValue(row.amount);
-    const category = row.category || "Uncategorized";
-    bucket.value += amount;
-    bucket.byCategory.set(category, (bucket.byCategory.get(category) || 0) + amount);
-  }
-  for (const row of rowsInAssetRange(financeData.income).filter((entry) => numberValue(entry.amount) > 0)) {
-    const bucket = buckets.get(key(parseAppDate(row.date)));
-    if (bucket) {
-      bucket.income += numberValue(row.amount);
-    }
-  }
-  const monthlyRows = [...buckets.values()];
-  const completeRows = monthlyRows.filter((row) => row.date < currentMonth);
-  const averageRows = completeRows.length ? completeRows : monthlyRows;
-  return {
-    rows: monthlyRows,
-    completedAverage: d3.mean(averageRows, (row) => row.value) || 0
-  };
-}
-
-function dailySpendingBuckets() {
+function weeklySpendingBuckets() {
   const spendingRows = spendingRowsInAssetRange();
   const incomeRows = rowsInAssetRange(financeData.income).filter((row) => numberValue(row.amount) > 0);
   const datedRows = [...spendingRows, ...incomeRows]
@@ -1030,13 +1009,13 @@ function dailySpendingBuckets() {
     return { rows: [], completedAverage: 0 };
   }
 
-  const today = startOfDay(new Date());
-  const firstDate = d3.timeDay.floor(d3.min(datedRows, (row) => row.parsedDate));
-  const dayStarts = d3.timeDay.range(firstDate, d3.timeDay.offset(today, 1));
+  const currentWeek = d3.timeMonday.floor(startOfDay(new Date()));
+  const firstWeek = d3.timeMonday.floor(d3.min(datedRows, (row) => row.parsedDate));
+  const weekStarts = d3.timeMonday.range(firstWeek, d3.timeMonday.offset(currentWeek, 1));
   const key = d3.timeFormat("%Y-%m-%d");
-  const buckets = new Map(dayStarts.map((date) => [key(date), { date, value: 0, income: 0, byCategory: new Map() }]));
+  const buckets = new Map(weekStarts.map((date) => [key(date), { date, value: 0, income: 0, byCategory: new Map() }]));
   for (const row of spendingRows) {
-    const bucket = buckets.get(key(parseAppDate(row.date)));
+    const bucket = buckets.get(key(d3.timeMonday.floor(parseAppDate(row.date))));
     if (!bucket) continue;
     const amount = numberValue(row.amount);
     const category = row.category || "Uncategorized";
@@ -1044,33 +1023,33 @@ function dailySpendingBuckets() {
     bucket.byCategory.set(category, (bucket.byCategory.get(category) || 0) + amount);
   }
   for (const row of incomeRows) {
-    const bucket = buckets.get(key(parseAppDate(row.date)));
+    const bucket = buckets.get(key(d3.timeMonday.floor(parseAppDate(row.date))));
     if (bucket) bucket.income += numberValue(row.amount);
   }
-  const dailyRows = [...buckets.values()];
-  const completeRows = dailyRows.filter((row) => row.date < today);
-  const averageRows = completeRows.length ? completeRows : dailyRows;
+  const weeklyRows = [...buckets.values()];
+  const completeRows = weeklyRows.filter((row) => row.date < currentWeek);
+  const averageRows = completeRows.length ? completeRows : weeklyRows;
   return {
-    rows: dailyRows,
+    rows: weeklyRows,
     completedAverage: d3.mean(averageRows, (row) => row.value) || 0
   };
 }
 
-function renderDailySpendingChart(daily) {
-  const { rows, completedAverage } = daily;
+function renderWeeklySpendingChart(weekly) {
+  const { rows, completedAverage } = weekly;
   if (!rows.length) {
-    renderAssetChartEmpty(assetsMonthlySpendingChart, "Add dated income or spending to build a daily trend.");
+    renderAssetChartEmpty(assetsMonthlySpendingChart, "Add dated income or spending to build a weekly trend.");
     return;
   }
   clearAssetChart(assetsMonthlySpendingChart);
-  const { width, height } = assetChartSize(assetsMonthlySpendingChart, 720, 310);
+  const { width, height } = assetChartSize(assetsMonthlySpendingChart, 520, 310);
   const margin = { top: 20, right: 58, bottom: 32, left: 58 };
   const x = d3.scaleTime().domain(assetDateDomain(rows)).range([margin.left, width - margin.right]);
   const incomeMax = d3.max(rows, (row) => row.income) || 1;
   const spendingMax = d3.max([...rows.map((row) => row.value), completedAverage]) || 1;
   const yIncome = d3.scaleLinear().domain([0, incomeMax]).nice().range([height - margin.bottom, margin.top]);
   const ySpending = d3.scaleLinear().domain([0, spendingMax]).nice().range([height - margin.bottom, margin.top]);
-  const svg = d3.select(assetsMonthlySpendingChart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", "Daily income on the left scale and daily spending on the right scale");
+  const svg = d3.select(assetsMonthlySpendingChart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", "Weekly income on the left scale and weekly spending on the right scale");
   svg.selectAll(".assets-chart-grid-line").data(ySpending.ticks(5)).join("line").attr("class", "assets-chart-grid-line").attr("x1", margin.left).attr("x2", width - margin.right).attr("y1", ySpending).attr("y2", ySpending);
   const tickEvery = Math.max(1, Math.ceil(rows.length / 8));
   const ticks = rows.filter((_, index) => index % tickEvery === 0).map((row) => row.date);
@@ -1084,18 +1063,18 @@ function renderDailySpendingChart(daily) {
   ]) {
     const seriesName = series.key === "value" ? "spending" : series.key;
     const line = d3.line().x((row) => x(row.date)).y((row) => series.scale(row[series.key])).curve(d3.curveLinear);
-    svg.append("path").datum(rows).attr("class", `daily-${seriesName}-line`).attr("d", line).attr("fill", "none").attr("stroke", series.color).attr("stroke-width", 2).attr("stroke-linecap", "butt").attr("stroke-linejoin", "miter");
+    svg.append("path").datum(rows).attr("class", `weekly-${seriesName}-line`).attr("d", line).attr("fill", "none").attr("stroke", series.color).attr("stroke-width", 2).attr("stroke-linecap", "butt").attr("stroke-linejoin", "miter");
   }
   if (completedAverage > 0) {
     svg.append("line").attr("x1", margin.left).attr("x2", width - margin.right).attr("y1", ySpending(completedAverage)).attr("y2", ySpending(completedAverage)).attr("stroke", "rgba(239,143,143,.6)").attr("stroke-dasharray", "5 4");
-    svg.append("text").attr("x", width - margin.right - 5).attr("y", Math.max(margin.top + 10, ySpending(completedAverage) - 7)).attr("text-anchor", "end").attr("fill", "rgba(239,143,143,.78)").attr("font-size", 10).text(`Daily avg ${assetMoneyTick(completedAverage)}`);
+    svg.append("text").attr("x", width - margin.right - 5).attr("y", Math.max(margin.top + 10, ySpending(completedAverage) - 7)).attr("text-anchor", "end").attr("fill", "rgba(239,143,143,.78)").attr("font-size", 10).text(`Weekly avg ${assetMoneyTick(completedAverage)}`);
   }
 
   const focus = svg.append("g").attr("class", "assets-chart-focus").style("display", "none");
   const crosshair = focus.append("line").attr("class", "assets-chart-crosshair").attr("y1", margin.top).attr("y2", height - margin.bottom);
   const incomeMarker = focus.append("rect").attr("width", 7).attr("height", 7).attr("x", -3.5).attr("y", -3.5).attr("fill", "#9FFCDF");
   const spendingMarker = focus.append("rect").attr("width", 7).attr("height", 7).attr("x", -3.5).attr("y", -3.5).attr("fill", "#ef8f8f");
-  const nearestDay = d3.bisector((row) => row.date).center;
+  const nearestWeek = d3.bisector((row) => row.date).center;
   svg.append("rect")
     .attr("class", "assets-chart-hit-area")
     .attr("x", margin.left)
@@ -1105,23 +1084,86 @@ function renderDailySpendingChart(daily) {
     .attr("fill", "transparent")
     .on("pointermove", (event) => {
       const pointerX = d3.pointer(event, svg.node())[0];
-      const row = rows[nearestDay(rows, x.invert(pointerX))];
+      const row = rows[nearestWeek(rows, x.invert(pointerX))];
       const markerX = x(row.date);
       focus.style("display", null);
       crosshair.attr("x1", markerX).attr("x2", markerX);
       incomeMarker.attr("transform", `translate(${markerX},${yIncome(row.income)})`);
       spendingMarker.attr("transform", `translate(${markerX},${ySpending(row.value)})`);
       positionAssetTooltip(tooltip, event, assetsMonthlySpendingChart, [
-        { text: `${d3.timeFormat("%B %d, %Y")(row.date)}${row === rows.at(-1) ? " · today" : ""}` },
+        { text: `Week of ${d3.timeFormat("%B %d, %Y")(row.date)}${row === rows.at(-1) ? " · current" : ""}` },
         { text: `Income ${money(row.income)}`, strong: true },
         { text: `Spending ${money(row.value)}`, strong: true },
-        { text: `Daily spending average ${money(completedAverage)}` }
+        { text: `Average weekly spending ${money(completedAverage)}` }
       ]);
     })
     .on("pointerleave", () => {
       focus.style("display", "none");
       tooltip.hidden = true;
     });
+}
+
+function investmentPortfolioModel() {
+  const investments = financeData.plaidInvestments || {};
+  const securityById = new Map((investments.securities || []).map((security) => [security.securityId, security]));
+  const positions = (investments.holdings || []).map((holding) => {
+    const security = securityById.get(holding.securityId) || {};
+    const value = numberValue(holding.institutionValue ?? (numberValue(holding.quantity) * numberValue(holding.institutionPrice)));
+    return {
+      name: security.name || "Security",
+      ticker: security.tickerSymbol || "",
+      type: security.type || "Investment",
+      quantity: numberValue(holding.quantity),
+      price: holding.institutionPrice === null ? null : numberValue(holding.institutionPrice),
+      value
+    };
+  }).filter((position) => position.value || position.quantity).sort((a, b) => b.value - a.value);
+  const accountTotal = (investments.accounts || []).reduce((total, account) => total + assetAccountBalance(account), 0);
+  return {
+    positions,
+    accounts: investments.accounts || [],
+    total: accountTotal || d3.sum(positions, (position) => position.value)
+  };
+}
+
+function renderInvestmentPortfolio() {
+  const portfolio = investmentPortfolioModel();
+  const accountCount = portfolio.accounts.length || (portfolio.positions.length ? 1 : 0);
+  assetsInvestmentTotal.textContent = money(portfolio.total);
+  assetsInvestmentCount.textContent = portfolio.positions.length
+    ? `${portfolio.positions.length} position${portfolio.positions.length === 1 ? "" : "s"} across ${accountCount} account${accountCount === 1 ? "" : "s"}`
+    : "No positions";
+  assetsInvestmentStatus.textContent = financeData.plaidInvestmentsRefreshedOn
+    ? `Plaid holdings · updated ${financeData.plaidInvestmentsRefreshedOn}`
+    : "Connect a brokerage through Plaid";
+  assetsPortfolioList.replaceChildren(
+    ...portfolio.positions.slice(0, 8).map((position) => {
+      const row = document.createElement("div");
+      row.className = "assets-portfolio-row";
+      const identity = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = position.ticker || position.name;
+      const detail = document.createElement("span");
+      detail.textContent = position.ticker ? position.name : position.type;
+      identity.append(name, detail);
+      const value = document.createElement("div");
+      const amount = document.createElement("strong");
+      amount.textContent = money(position.value);
+      const quantity = document.createElement("span");
+      quantity.textContent = `${position.quantity.toLocaleString("en-US", { maximumFractionDigits: 4 })} shares${position.price === null ? "" : ` · ${money(position.price)}`}`;
+      value.append(amount, quantity);
+      row.append(identity, value);
+      return row;
+    })
+  );
+  if (!portfolio.positions.length) {
+    const empty = document.createElement("div");
+    empty.className = "assets-portfolio-empty";
+    empty.textContent = portfolio.accounts.length
+      ? "Plaid has not returned holdings for this investment account yet."
+      : "Link Robinhood or another brokerage to show accounts, holdings, prices, and position values.";
+    assetsPortfolioList.append(empty);
+  }
 }
 
 function renderAccountBalancesChart() {
@@ -1167,17 +1209,17 @@ function renderAccountBalancesChart() {
     .on("pointerleave", () => { tooltip.hidden = true; });
 }
 
-function categoryTrendData(monthly, daily) {
-  const currentMonth = d3.timeMonth.floor(new Date());
-  const averageRows = monthly.rows.some((row) => row.date < currentMonth)
-    ? monthly.rows.filter((row) => row.date < currentMonth)
-    : monthly.rows;
+function categoryTrendData(weekly) {
+  const currentWeek = d3.timeMonday.floor(new Date());
+  const averageRows = weekly.rows.some((row) => row.date < currentWeek)
+    ? weekly.rows.filter((row) => row.date < currentWeek)
+    : weekly.rows;
   const categories = new Set();
-  for (const row of daily.rows) {
+  for (const row of weekly.rows) {
     for (const category of row.byCategory.keys()) categories.add(category);
   }
   return [...categories].map((name) => {
-    const points = daily.rows.map((row) => ({ date: row.date, value: row.byCategory.get(name) || 0 }));
+    const points = weekly.rows.map((row) => ({ date: row.date, value: row.byCategory.get(name) || 0 }));
     return {
       name,
       points,
@@ -1204,7 +1246,7 @@ function renderCategoryTrends(categories) {
     const name = document.createElement("strong");
     name.textContent = category.name;
     const average = document.createElement("span");
-    average.textContent = `${money(category.average)} avg / mo`;
+    average.textContent = `${money(category.average)} avg / wk`;
     head.append(name, average);
     const chart = document.createElement("div");
     chart.className = "category-trend-chart";
@@ -1216,7 +1258,7 @@ function renderCategoryTrends(categories) {
     const margin = { top: 8, right: 5, bottom: 20, left: 5 };
     const x = d3.scaleTime().domain(assetDateDomain(category.points)).range([margin.left, width - margin.right]);
     const y = d3.scaleLinear().domain([0, d3.max(category.points, (row) => row.value) || 1]).nice().range([height - margin.bottom, margin.top]);
-    const svg = d3.select(chart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", `${category.name} daily spending`);
+    const svg = d3.select(chart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", `${category.name} weekly spending`);
     const tooltip = assetChartTooltip(chart);
     const line = d3.line().x((row) => x(row.date)).y((row) => y(row.value)).curve(d3.curveLinear);
     svg.append("path").datum(category.points).attr("class", "category-day-line").attr("d", line).attr("fill", "none").attr("stroke", "#52AD9C").attr("stroke-width", 1.5).attr("stroke-linecap", "butt").attr("stroke-linejoin", "miter");
@@ -1226,17 +1268,17 @@ function renderCategoryTrends(categories) {
     const tickEvery = Math.max(1, Math.ceil(category.points.length / 4));
     const ticks = category.points.filter((_, index) => index % tickEvery === 0).map((row) => row.date);
     svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).tickValues(ticks).tickFormat(d3.timeFormat("%b %d")).tickSize(0)).call((group) => group.select(".domain").remove());
-    const nearestDay = d3.bisector((row) => row.date).center;
+    const nearestWeek = d3.bisector((row) => row.date).center;
     svg.append("rect").attr("class", "assets-chart-hit-area").attr("x", margin.left).attr("y", margin.top).attr("width", width - margin.left - margin.right).attr("height", height - margin.top - margin.bottom).attr("fill", "transparent")
       .on("pointermove", (event) => {
         const pointerX = d3.pointer(event, svg.node())[0];
-        const row = category.points[nearestDay(category.points, x.invert(pointerX))];
+        const row = category.points[nearestWeek(category.points, x.invert(pointerX))];
         const markerX = x(row.date);
         focus.style("display", null);
         crosshair.attr("x1", markerX).attr("x2", markerX);
         marker.attr("transform", `translate(${markerX},${y(row.value)})`);
         positionAssetTooltip(tooltip, event, chart, [
-          { text: d3.timeFormat("%B %d, %Y")(row.date) },
+          { text: `Week of ${d3.timeFormat("%B %d, %Y")(row.date)}` },
           { text: money(row.value), strong: true }
         ]);
       })
@@ -1247,22 +1289,21 @@ function renderCategoryTrends(categories) {
   }
 }
 
-function spendingInsights(monthly, categories) {
-  if (!monthly.rows.length) return [];
+function spendingInsights(weekly, categories) {
+  if (!weekly.rows.length) return [];
   const today = startOfDay(new Date());
-  const currentMonth = d3.timeMonth.floor(today);
-  const completed = monthly.rows.filter((row) => row.date < currentMonth);
-  const current = monthly.rows.find((row) => row.date.getTime() === currentMonth.getTime());
+  const currentWeek = d3.timeMonday.floor(today);
+  const completed = weekly.rows.filter((row) => row.date < currentWeek);
+  const current = weekly.rows.find((row) => row.date.getTime() === currentWeek.getTime());
   const insights = [];
-  if (current && monthly.completedAverage > 0) {
-    const daysInMonth = d3.timeDay.count(currentMonth, d3.timeMonth.offset(currentMonth, 1));
-    const elapsedDays = Math.max(1, today.getDate());
-    const projected = current.value / elapsedDays * daysInMonth;
-    const difference = projected - monthly.completedAverage;
+  if (current && weekly.completedAverage > 0) {
+    const elapsedDays = Math.max(1, d3.timeDay.count(currentWeek, today) + 1);
+    const projected = current.value / elapsedDays * 7;
+    const difference = projected - weekly.completedAverage;
     insights.push({
       label: "Current pace",
       value: money(projected),
-      detail: `${Math.abs(difference / monthly.completedAverage * 100).toFixed(0)}% ${difference >= 0 ? "above" : "below"} your completed-month average if this pace holds.`
+      detail: `${Math.abs(difference / weekly.completedAverage * 100).toFixed(0)}% ${difference >= 0 ? "above" : "below"} your average completed week if this pace holds.`
     });
   }
   const top = categories[0];
@@ -1279,9 +1320,9 @@ function spendingInsights(monthly, categories) {
     const previous = completed.at(-2);
     const difference = latest.value - previous.value;
     insights.push({
-      label: "Last complete month",
+      label: "Last complete week",
       value: `${difference >= 0 ? "+" : ""}${money(difference)}`,
-      detail: `${d3.timeFormat("%B")(latest.date)} spending was ${difference >= 0 ? "higher" : "lower"} than ${d3.timeFormat("%B")(previous.date)}.`
+      detail: `Week of ${d3.timeFormat("%b %d")(latest.date)} was ${difference >= 0 ? "higher" : "lower"} than the prior week.`
     });
     const changes = categories.map((category) => ({
       name: category.name,
@@ -1292,7 +1333,7 @@ function spendingInsights(monthly, categories) {
       insights.push({
         label: "Biggest category shift",
         value: biggest.name,
-        detail: `${biggest.difference >= 0 ? "+" : ""}${money(biggest.difference)} from ${d3.timeFormat("%B")(previous.date)} to ${d3.timeFormat("%B")(latest.date)}.`
+        detail: `${biggest.difference >= 0 ? "+" : ""}${money(biggest.difference)} from the week of ${d3.timeFormat("%b %d")(previous.date)} to ${d3.timeFormat("%b %d")(latest.date)}.`
       });
     }
   }
@@ -1304,7 +1345,7 @@ function renderSpendingInsights(insights) {
   if (!insights.length) {
     const empty = document.createElement("div");
     empty.className = "assets-insight-empty";
-    empty.textContent = "Add at least two months of dated spending to unlock comparisons.";
+    empty.textContent = "Add at least two weeks of dated spending to unlock comparisons.";
     assetsInsights.append(empty);
     return;
   }
@@ -1329,15 +1370,13 @@ function assetsCalculation() {
     return cached;
   }
 
-  const monthly = monthlySpendingBuckets();
-  const daily = dailySpendingBuckets();
-  const categories = categoryTrendData(monthly, daily);
+  const weekly = weeklySpendingBuckets();
+  const categories = categoryTrendData(weekly);
   const calculation = {
     key,
-    monthly,
-    daily,
+    weekly,
     categories,
-    insights: spendingInsights(monthly, categories)
+    insights: spendingInsights(weekly, categories)
   };
   assetsCalculationCache.set(key, calculation);
   while (assetsCalculationCache.size > 8) {
@@ -1364,16 +1403,17 @@ function renderAssetsGraphs() {
   if (renderKey === assetsRenderedKey) {
     return;
   }
-  const completed = calculation.daily.rows.filter((row) => row.date < startOfDay(new Date()));
+  const currentWeek = d3.timeMonday.floor(startOfDay(new Date()));
+  const completed = calculation.weekly.rows.filter((row) => row.date < currentWeek);
   const previous = completed.at(-2);
   const latest = completed.at(-1);
   const spendingChange = previous && latest ? latest.value - previous.value : null;
   assetsSpendingChange.textContent = previous && latest
-    ? `Spending ${spendingChange >= 0 ? "+" : ""}${money(spendingChange)} vs prior day`
-    : "Need 2 complete days";
+    ? `Spending ${spendingChange >= 0 ? "+" : ""}${money(spendingChange)} vs prior week`
+    : "Need 2 complete weeks";
   assetsSpendingChange.classList.toggle("is-spending-up", spendingChange > 0);
   assetsSpendingChange.classList.toggle("is-spending-down", spendingChange < 0);
-  renderDailySpendingChart(calculation.daily);
+  renderWeeklySpendingChart(calculation.weekly);
   renderAccountBalancesChart();
   renderCategoryTrends(calculation.categories);
   renderSpendingInsights(calculation.insights);
@@ -1385,11 +1425,12 @@ function renderAssets() {
   const cash = cashAccountsTotal();
   const debt = connectedDebtTotal() + manualDebtAtDate(today);
   const netWorth = connectedAssetsTotal() - debt;
-  const averageSpending = assetsCalculation().monthly.completedAverage;
+  const averageSpending = assetsCalculation().weekly.completedAverage;
   assetsCashTotal.textContent = money(cash);
   assetsNetWorth.textContent = money(netWorth);
   assetsDebt.textContent = money(debt);
   assetsAverageSpending.textContent = money(averageSpending);
+  renderInvestmentPortfolio();
   requestAnimationFrame(renderAssetsGraphs);
 }
 
@@ -4493,6 +4534,35 @@ function refreshPlaidAccounts(force = false) {
   return plaidAccountsPromise;
 }
 
+function refreshPlaidInvestments(force = false) {
+  if (plaidInvestmentsPromise) return plaidInvestmentsPromise;
+  assetsInvestmentStatus.textContent = force ? "Refreshing Plaid holdings..." : "Loading saved Plaid holdings...";
+  plaidInvestmentsPromise = api(`/api/plaid/investments${force ? "?force=1" : ""}`)
+    .then((result) => {
+      financeData = {
+        ...financeData,
+        plaidInvestments: {
+          accounts: result.accounts || [],
+          holdings: result.holdings || [],
+          securities: result.securities || []
+        },
+        plaidInvestmentsRefreshedOn: result.refreshedOn || financeData.plaidInvestmentsRefreshedOn || ""
+      };
+      assetsRenderedKey = "";
+      renderAssets();
+      if (result.stale && !(result.accounts || []).length && !(result.holdings || []).length) {
+        assetsInvestmentStatus.textContent = "Plaid holdings are still preparing · refresh shortly";
+      }
+      return result;
+    })
+    .catch(() => {
+      assetsInvestmentStatus.textContent = "Plaid holdings refresh failed";
+      return null;
+    })
+    .finally(() => { plaidInvestmentsPromise = null; });
+  return plaidInvestmentsPromise;
+}
+
 function loadPlaidScript() {
   if (window.Plaid) {
     return Promise.resolve(window.Plaid);
@@ -4537,6 +4607,9 @@ async function renderCurrent(options = {}) {
 
   if (options.refreshPlaidAccounts) {
     refreshPlaidAccounts(options.refreshPlaidAccounts === "force");
+  }
+  if (options.refreshPlaidInvestments) {
+    refreshPlaidInvestments(options.refreshPlaidInvestments === "force");
   }
 }
 
@@ -5211,13 +5284,18 @@ plaidManagerButton.addEventListener("click", () => {
 });
 refreshPlaidAccountsButton.addEventListener("click", () => refreshPlaidAccounts(true));
 
-linkBankButton.addEventListener("click", async () => {
-  linkBankButton.disabled = true;
+async function openPlaidLink(purpose, button) {
+  const isInvestment = purpose === "investments";
+  button.disabled = true;
   plaidManagerDialog.close();
-  plaidStatus.textContent = "Starting Plaid...";
+  plaidStatus.textContent = isInvestment ? "Starting investment link..." : "Starting Plaid...";
+  if (isInvestment) assetsInvestmentStatus.textContent = "Starting Plaid investment link...";
 
   try {
-    const tokenResult = await api("/api/plaid/link-token", { method: "POST" });
+    const tokenResult = await api("/api/plaid/link-token", {
+      method: "POST",
+      body: JSON.stringify({ purpose })
+    });
     if (!tokenResult.configured) {
       plaidStatusText = "Plaid not configured";
       renderPlaidButton(plaidStatusText);
@@ -5233,23 +5311,28 @@ linkBankButton.addEventListener("click", async () => {
       token: tokenResult.linkToken,
       onSuccess: async (publicToken, metadata) => {
         try {
-          plaidStatus.textContent = "Linking bank...";
+          plaidStatus.textContent = isInvestment ? "Linking investment account..." : "Linking bank...";
           const exchangeResult = await api("/api/plaid/exchange-token", {
             method: "POST",
             body: JSON.stringify({ publicToken, metadata })
           });
           linkedPlaidItems = exchangeResult.linkedItems || [];
           plaidStatusText = "";
-          await renderCurrent({ syncPlaid: "force", refreshPlaidAccounts: "force" });
+          await renderCurrent({
+            syncPlaid: isInvestment ? false : "force",
+            refreshPlaidAccounts: "force",
+            refreshPlaidInvestments: "force"
+          });
         } catch (error) {
           plaidStatusText = "Plaid Link failed";
           renderPlaidButton(plaidStatusText);
         } finally {
-          linkBankButton.disabled = false;
+          button.disabled = false;
         }
       },
       onExit: () => {
-        linkBankButton.disabled = false;
+        button.disabled = false;
+        if (isInvestment) renderInvestmentPortfolio();
         renderPlaidButton(plaidStatusText);
       }
     });
@@ -5260,9 +5343,12 @@ linkBankButton.addEventListener("click", async () => {
     plaidStatusText = "Plaid Link failed";
     renderPlaidButton(plaidStatusText);
   } finally {
-    linkBankButton.disabled = false;
+    button.disabled = false;
   }
-});
+}
+
+linkBankButton.addEventListener("click", () => openPlaidLink("banking", linkBankButton));
+linkInvestmentButton.addEventListener("click", () => openPlaidLink("investments", linkInvestmentButton));
 
 document.querySelector("[data-close-plaid]").addEventListener("click", () => {
   plaidDialog.close();
@@ -5335,5 +5421,6 @@ const initialPage = pageFromHash();
 showPage(initialPage);
 renderCurrent({
   syncPlaid: initialPage === "finance",
-  refreshPlaidAccounts: true
+  refreshPlaidAccounts: true,
+  refreshPlaidInvestments: true
 });
