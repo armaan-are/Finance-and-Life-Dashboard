@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Life Portal</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css?v=20260804-assets-spending-5">
   </head>
   <body>
     <nav class="tab-bar" aria-label="Life Portal sections">
@@ -45,6 +45,7 @@
         </span>
         <span>Assets &amp;<br>Spending</span>
       </a>
+      <span class="tab-divider" aria-hidden="true"></span>
       <a class="tab" href="#work" data-page-link="work">
         <span class="tab-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
@@ -55,6 +56,7 @@
         </span>
         <span>Work</span>
       </a>
+      <span class="tab-divider" aria-hidden="true"></span>
       <a class="tab" href="#class" data-page-link="class">
         <span class="tab-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
@@ -99,6 +101,10 @@
             <div class="summary-metric">
               <span>GDP Contribution</span>
               <strong data-gdp-contribution>0.00</strong>
+            </div>
+            <div class="summary-metric tuition-metric">
+              <span>Tuition</span>
+              <strong data-tuition-total>0.00</strong>
             </div>
           </div>
           <div class="category-breakdown" data-category-breakdown></div>
@@ -276,16 +282,24 @@
             </div>
             <div class="ledger-list" data-loan-list aria-label="Loan log"></div>
           </section>
+          <section class="ledger debt-ledger credit-card-ledger" aria-labelledby="credit-card-liabilities-title">
+            <div class="ledger-head">
+              <h2 id="credit-card-liabilities-title">Credit Card Liabilities</h2>
+              <span data-credit-card-total>$0.00</span>
+            </div>
+            <div class="credit-card-list" data-credit-card-list aria-label="Credit card liabilities"></div>
+          </section>
         </div>
       </section>
       <section class="assets-page page-view" data-page="assets" aria-labelledby="assets-spending-title" hidden>
         <div class="finance-head">
           <h1 id="assets-spending-title">Assets &amp; Spending</h1>
           <div class="assets-range" role="group" aria-label="Assets and spending chart date range">
-            <button type="button" data-assets-range="30d" aria-pressed="false">30D</button>
-            <button type="button" data-assets-range="90d" aria-pressed="false">90D</button>
-            <button class="is-active" type="button" data-assets-range="1y" aria-pressed="true">1Y</button>
-            <button type="button" data-assets-range="all" aria-pressed="false">All</button>
+            <button class="add-button" type="button" data-assets-range="6m" aria-pressed="false">6M</button>
+            <button class="add-button is-active" type="button" data-assets-range="1y" aria-pressed="true">1Y</button>
+            <button class="add-button" type="button" data-assets-range="2y" aria-pressed="false">2Y</button>
+            <button class="add-button" type="button" data-assets-range="all" aria-pressed="false">All</button>
+            <button class="add-button" type="button" data-assets-normalize aria-pressed="false" title="Exclude tuition from spending analytics">Normalize</button>
           </div>
         </div>
         <section class="asset-icon-row assets-overview" aria-label="Assets and spending totals">
@@ -302,22 +316,26 @@
             <strong data-assets-debt>$0.00</strong>
           </div>
           <div class="asset-overview-metric">
-            <span>Range Spending</span>
-            <strong data-assets-range-spending>$0.00</strong>
+            <span>Average Monthly Spend</span>
+            <strong data-assets-average-spending>$0.00</strong>
           </div>
         </section>
         <section class="assets-chart-grid" aria-label="Assets and spending analytics">
           <article class="assets-chart-card assets-chart-wide">
             <div class="assets-chart-head">
               <div>
-                <h2>Estimated Net Worth</h2>
-                <p>Connected account activity and dated loans</p>
+                <h2>Daily Income &amp; Spending</h2>
+                <p>Income scale left · spending scale right</p>
+                <div class="assets-chart-legend assets-income-spending-legend" aria-label="Income and spending legend">
+                  <span>Income</span>
+                  <span>Spending</span>
+                </div>
               </div>
-              <strong data-assets-net-worth-change>—</strong>
+              <strong data-assets-spending-change>—</strong>
             </div>
-            <div class="assets-chart assets-net-worth-chart" data-assets-net-worth-chart></div>
+            <div class="assets-chart assets-monthly-spending-chart" data-assets-monthly-spending-chart></div>
           </article>
-          <article class="assets-chart-card">
+          <article class="assets-chart-card assets-chart-wide">
             <div class="assets-chart-head">
               <div>
                 <h2>Account Balances</h2>
@@ -326,28 +344,24 @@
             </div>
             <div class="assets-chart" data-assets-balances-chart></div>
           </article>
-          <article class="assets-chart-card">
-            <div class="assets-chart-head">
-              <div>
-                <h2>Cash Flow</h2>
-                <p>Income compared with spending</p>
-              </div>
-              <div class="assets-chart-legend" aria-label="Cash flow chart legend">
-                <span>Income</span>
-                <span>Spending</span>
-              </div>
-            </div>
-            <div class="assets-chart" data-assets-cash-flow-chart></div>
-          </article>
           <article class="assets-chart-card assets-chart-wide">
             <div class="assets-chart-head">
               <div>
-                <h2>Spending by Category</h2>
-                <p>Largest categories in the selected range</p>
+                <h2>Daily Spending by Category</h2>
+                <p>One daily trend for every category used in the selected range</p>
               </div>
             </div>
-            <div class="assets-chart assets-spending-chart" data-assets-spending-chart></div>
+            <div class="category-trend-grid" data-assets-category-trends></div>
           </article>
+        </section>
+        <section class="assets-insights" aria-labelledby="assets-insights-title">
+          <div class="assets-chart-head">
+            <div>
+              <h2 id="assets-insights-title">Insights</h2>
+              <p>Patterns worth noticing in the selected range</p>
+            </div>
+          </div>
+          <div class="assets-insight-grid" data-assets-insights></div>
         </section>
       </section>
       <section class="work-page page-view" data-page="work" aria-labelledby="work-title" hidden>
@@ -865,6 +879,6 @@
     </dialog>
     <script src="/vendor/d3/d3.min.js"></script>
     <script src="/vendor/d3-sankey/d3-sankey.min.js"></script>
-    <script src="/app.js"></script>
+    <script src="/app.js?v=20260804-dual-scale-daily-graphs"></script>
   </body>
 </html>

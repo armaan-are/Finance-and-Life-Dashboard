@@ -59,6 +59,13 @@ body {
   text-align: center;
 }
 
+.tab-divider {
+  width: 42px;
+  height: 1px;
+  margin: 1px auto;
+  background: var(--line);
+}
+
 .tab:hover,
 .tab:focus-visible,
 .tab.is-active {
@@ -136,7 +143,7 @@ h2 {
 
 .finance-summary {
   display: grid;
-  grid-template-columns: minmax(180px, 230px) 170px minmax(300px, 1fr) 390px;
+  grid-template-columns: minmax(180px, 230px) 170px minmax(300px, 1fr) minmax(390px, 1fr);
   align-items: center;
   gap: 18px;
   margin: 18px 0 32px;
@@ -187,6 +194,14 @@ h2 {
   font-weight: 500;
 }
 
+.tuition-metric {
+  margin-top: 2px;
+}
+
+.tuition-metric strong {
+  font-size: 24px;
+}
+
 .category-breakdown {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -204,6 +219,19 @@ h2 {
   gap: 2px;
 }
 
+.category-total::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 999px;
+  background: var(--category-color);
+}
+
+.category-total {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
 .category-total strong {
   color: var(--text-active);
   font-size: 16px;
@@ -212,12 +240,13 @@ h2 {
 
 .donut-wrap {
   display: grid;
+  justify-self: stretch;
   justify-items: center;
   min-width: 0;
 }
 
 .donut-chart {
-  width: min(100%, 390px);
+  width: min(100%, 430px);
 }
 
 .donut-chart svg {
@@ -229,13 +258,13 @@ h2 {
 
 .donut-leader-line {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.5);
+  stroke: rgba(159, 252, 223, 0.42);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
 .donut-leader-dot {
-  fill: rgba(255, 255, 255, 0.62);
+  fill: rgba(159, 252, 223, 0.72);
 }
 
 .donut-label {
@@ -258,6 +287,7 @@ h2 {
 
 .debt-columns {
   grid-template-columns: minmax(760px, 1fr);
+  gap: 28px;
   margin-top: 22px;
   overflow-x: auto;
 }
@@ -279,26 +309,27 @@ h2 {
   padding: 0;
   border: 0;
   display: flex;
-  gap: 16px;
+  gap: 8px;
 }
 
 .assets-range button {
-  min-width: 0;
-  padding: 6px 0 5px;
-  border: 0;
-  border-bottom: 1px solid transparent;
+  height: 28px;
+  min-width: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--row-line);
+  border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .assets-range button:hover,
 .assets-range button:focus-visible,
 .assets-range button.is-active {
-  border-bottom-color: var(--text-active);
-  background: transparent;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-active);
   outline: none;
 }
@@ -382,12 +413,6 @@ h2 {
   background: transparent;
 }
 
-.assets-chart-card:nth-child(3) {
-  margin-left: 24px;
-  padding-left: 24px;
-  border-left: 1px solid var(--line);
-}
-
 .assets-chart-wide {
   grid-column: 1 / -1;
 }
@@ -417,13 +442,21 @@ h2 {
   white-space: nowrap;
 }
 
+.assets-chart-head > strong.is-spending-up {
+  color: #ef8f8f;
+}
+
+.assets-chart-head > strong.is-spending-down {
+  color: var(--aquamarine);
+}
+
 .assets-chart {
   position: relative;
   min-height: 250px;
   margin-top: 8px;
 }
 
-.assets-net-worth-chart {
+.assets-monthly-spending-chart {
   min-height: 310px;
 }
 
@@ -447,6 +480,24 @@ h2 {
 .assets-chart-grid-line {
   stroke: rgba(255, 255, 255, 0.075);
   stroke-width: 1;
+}
+
+.assets-chart-axis-income .tick text {
+  fill: #9ffcdf;
+}
+
+.assets-chart-axis-spending .tick text {
+  fill: #ef8f8f;
+}
+
+.assets-chart-crosshair {
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.assets-chart-hit-area {
+  cursor: crosshair;
 }
 
 .assets-chart-empty {
@@ -477,6 +528,10 @@ h2 {
   color: var(--text-muted);
 }
 
+.assets-chart-tooltip strong {
+  display: block;
+}
+
 .assets-chart-legend {
   display: flex;
   align-items: center;
@@ -500,6 +555,18 @@ h2 {
 
 .assets-chart-legend span:last-child {
   --legend-color: #6c7f91;
+}
+
+.assets-income-spending-legend {
+  margin-top: 9px;
+}
+
+.assets-income-spending-legend span:first-child {
+  --legend-color: #9FFCDF;
+}
+
+.assets-income-spending-legend span:last-child {
+  --legend-color: #e58b8b;
 }
 
 .assets-cash-dialog {
@@ -545,6 +612,160 @@ h2 {
 .assets-cash-empty {
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.category-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 18px;
+  background: var(--line);
+}
+
+.category-trend-card {
+  min-width: 0;
+  padding: 16px 16px 8px;
+  background: var(--surface, #0c1116);
+}
+
+.category-trend-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.category-trend-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-active);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-trend-head span {
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.category-trend-chart {
+  position: relative;
+  min-height: 105px;
+  margin-top: 8px;
+}
+
+.category-trend-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.category-trend-chart .tick text {
+  fill: var(--text-muted);
+  font-size: 9px;
+}
+
+.assets-insights {
+  padding: 24px 0 34px;
+}
+
+.assets-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 16px;
+  background: var(--line);
+}
+
+.assets-insight-card {
+  min-width: 0;
+  min-height: 132px;
+  padding: 16px;
+  background: var(--surface, #0c1116);
+}
+
+.assets-insight-card span,
+.assets-insight-card p,
+.assets-insight-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.assets-insight-card strong {
+  margin-top: 10px;
+  display: block;
+  overflow: hidden;
+  color: var(--text-active);
+  font-size: 20px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assets-insight-card p {
+  margin: 9px 0 0;
+  line-height: 1.45;
+}
+
+.assets-insight-empty {
+  padding: 18px 0;
+}
+
+.credit-card-ledger {
+  min-width: 760px;
+}
+
+.credit-card-list {
+  width: 100%;
+}
+
+.credit-card-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 150px 150px;
+  align-items: center;
+  gap: 22px;
+  min-height: 58px;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.credit-card-identity,
+.credit-card-balance {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.credit-card-identity strong,
+.credit-card-balance strong {
+  overflow: hidden;
+  color: var(--text-active);
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.credit-card-identity span,
+.credit-card-balance span,
+.credit-card-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.credit-card-balance {
+  text-align: right;
+}
+
+.credit-card-balance.is-owed strong {
+  color: #e58b8b;
+}
+
+.credit-card-empty {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--row-line);
 }
 
 .work-actions {
@@ -2696,10 +2917,9 @@ h2 {
     grid-column: auto;
   }
 
-  .assets-chart-card:nth-child(3) {
-    margin-left: 0;
-    padding-left: 0;
-    border-left: 0;
+  .category-trend-grid,
+  .assets-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .class-header-card,
@@ -2847,5 +3067,12 @@ h2 {
   .plaid-skip-button,
   .plaid-restore-button {
     width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .category-trend-grid,
+  .assets-insight-grid {
+    grid-template-columns: 1fr;
   }
 }

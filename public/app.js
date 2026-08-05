@@ -96,19 +96,22 @@ const loanDialog = document.querySelector("[data-loan-dialog]");
 const loanForm = document.querySelector("[data-loan-form]");
 const totalDebt = document.querySelector("[data-total-debt]");
 const graduationDateLabel = document.querySelector("[data-graduation-date-label]");
+const creditCardList = document.querySelector("[data-credit-card-list]");
+const creditCardTotal = document.querySelector("[data-credit-card-total]");
 const assetsCashTotal = document.querySelector("[data-assets-cash-total]");
 const assetsCashDialog = document.querySelector("[data-assets-cash-dialog]");
 const assetsCashSummary = document.querySelector("[data-assets-cash-summary]");
 const assetsCashList = document.querySelector("[data-assets-cash-list]");
 const assetsNetWorth = document.querySelector("[data-assets-net-worth]");
 const assetsDebt = document.querySelector("[data-assets-debt]");
-const assetsRangeSpending = document.querySelector("[data-assets-range-spending]");
-const assetsNetWorthChange = document.querySelector("[data-assets-net-worth-change]");
-const assetsNetWorthChart = document.querySelector("[data-assets-net-worth-chart]");
+const assetsAverageSpending = document.querySelector("[data-assets-average-spending]");
+const assetsSpendingChange = document.querySelector("[data-assets-spending-change]");
+const assetsMonthlySpendingChart = document.querySelector("[data-assets-monthly-spending-chart]");
 const assetsBalancesChart = document.querySelector("[data-assets-balances-chart]");
-const assetsCashFlowChart = document.querySelector("[data-assets-cash-flow-chart]");
-const assetsSpendingChart = document.querySelector("[data-assets-spending-chart]");
+const assetsCategoryTrends = document.querySelector("[data-assets-category-trends]");
+const assetsInsights = document.querySelector("[data-assets-insights]");
 const assetsRangeButtons = document.querySelectorAll("[data-assets-range]");
+const assetsNormalizeButton = document.querySelector("[data-assets-normalize]");
 const workList = document.querySelector("[data-work-list]");
 const workSearch = document.querySelector("[data-work-search]");
 const workCountLabel = document.querySelector("[data-work-count-label]");
@@ -181,6 +184,7 @@ const summaryElements = {
   currentBudgetPeriod: document.querySelector("[data-current-budget-period]"),
   totalSpending: document.querySelector("[data-total-spending]"),
   extractedValue: document.querySelector("[data-extracted-value]"),
+  tuition: document.querySelector("[data-tuition-total]"),
   totalIncome: document.querySelector("[data-total-income]"),
   gdpContribution: document.querySelector("[data-gdp-contribution]"),
   categoryBreakdown: document.querySelector("[data-category-breakdown]"),
@@ -215,6 +219,8 @@ let plaidScriptPromise = null;
 let categoryLedger = "spending";
 let workQuery = "";
 let assetsChartRange = "1y";
+const assetsTuitionNormalizedKey = "lifePortal.assetsTuitionNormalized";
+let assetsTuitionNormalized = localStorage.getItem(assetsTuitionNormalizedKey) === "true";
 const assetsCalculationCache = new Map();
 let assetsRenderedKey = "";
 const sankeySimulationStorageKey = "lifePortal.financeSankeySimulations";
@@ -660,12 +666,12 @@ async function saveLoanField(id, field, value) {
 
 function renderDebt() {
   const rows = financeData.loans || [];
-  let total = 0;
+  let loanTotal = 0;
 
   loanList.replaceChildren(
     ...rows.map((row) => {
       const amounts = loanAmounts(row);
-      total += amounts.currentAmount;
+      loanTotal += amounts.currentAmount;
       const element = document.createElement("div");
       element.className = "ledger-row loan-row";
       element.append(loanCell("name", loanInput(row, "name", row.name)));
@@ -680,7 +686,53 @@ function renderDebt() {
     })
   );
 
-  totalDebt.textContent = formatNumber(total);
+  const creditAccounts = (financeData.plaidAccounts || [])
+    .filter((account) => account.type === "credit")
+    .sort((a, b) => Math.abs(assetAccountBalance(b)) - Math.abs(assetAccountBalance(a)));
+  const cardTotal = creditAccounts.reduce((total, account) => total + Math.abs(assetAccountBalance(account)), 0);
+  creditCardTotal.textContent = money(cardTotal);
+  creditCardList.replaceChildren(
+    ...creditAccounts.map((account) => {
+      const row = document.createElement("div");
+      row.className = "credit-card-row";
+
+      const identity = document.createElement("div");
+      identity.className = "credit-card-identity";
+      const name = document.createElement("strong");
+      name.textContent = account.name || "Credit Card";
+      const meta = document.createElement("span");
+      meta.textContent = [account.institutionName, account.subtype].filter(Boolean).join(" · ") || "Connected account";
+      identity.append(name, meta);
+
+      const available = document.createElement("div");
+      available.className = "credit-card-balance";
+      const availableLabel = document.createElement("span");
+      availableLabel.textContent = "Available credit";
+      const availableAmount = document.createElement("strong");
+      const availableValue = plaidAccountBalance(account, "available");
+      availableAmount.textContent = availableValue === null ? "—" : money(availableValue);
+      available.append(availableLabel, availableAmount);
+
+      const balance = document.createElement("div");
+      balance.className = "credit-card-balance is-owed";
+      const balanceLabel = document.createElement("span");
+      balanceLabel.textContent = "Current balance";
+      const balanceAmount = document.createElement("strong");
+      balanceAmount.textContent = money(Math.abs(assetAccountBalance(account)));
+      balance.append(balanceLabel, balanceAmount);
+
+      row.append(identity, available, balance);
+      return row;
+    })
+  );
+  if (!creditAccounts.length) {
+    const empty = document.createElement("div");
+    empty.className = "credit-card-empty";
+    empty.textContent = "No connected credit card liabilities.";
+    creditCardList.append(empty);
+  }
+
+  totalDebt.textContent = formatNumber(loanTotal + cardTotal);
   graduationDateLabel.textContent = financeData.graduationDate
     ? `Graduation ${displayAppDate(financeData.graduationDate)}`
     : "No graduation date";
@@ -799,9 +851,9 @@ function assetsDataSignature() {
 
 function assetRangeStart() {
   const today = startOfDay(new Date());
-  const offsets = { "30d": 30, "90d": 90, "1y": 365 };
-  if (offsets[assetsChartRange]) {
-    return d3.timeDay.offset(today, -offsets[assetsChartRange]);
+  const monthOffsets = { "6m": 6, "1y": 12, "2y": 24 };
+  if (monthOffsets[assetsChartRange]) {
+    return d3.timeMonth.offset(d3.timeMonth.floor(today), -(monthOffsets[assetsChartRange] - 1));
   }
 
   const dates = [
@@ -895,9 +947,13 @@ function assetChartTooltip(container) {
   return tooltip;
 }
 
-function positionAssetTooltip(tooltip, event, container, html) {
+function positionAssetTooltip(tooltip, event, container, lines) {
   const [x, y] = d3.pointer(event, container);
-  tooltip.innerHTML = html;
+  tooltip.replaceChildren(...lines.map(({ text, strong = false }) => {
+    const line = document.createElement(strong ? "strong" : "span");
+    line.textContent = text;
+    return line;
+  }));
   tooltip.style.left = `${Math.max(72, Math.min(container.clientWidth - 72, x))}px`;
   tooltip.style.top = `${Math.max(54, y)}px`;
   tooltip.hidden = false;
@@ -913,46 +969,157 @@ function assetMoneyTick(value) {
   return `${value < 0 ? "-" : ""}$${compact}`;
 }
 
-function renderNetWorthChart(points) {
-  if (!points.length) {
-    renderAssetChartEmpty(assetsNetWorthChart, "Add dated finance entries to build a net worth trend.");
-    return;
+function assetDateDomain(rows, interval = d3.timeDay) {
+  const extent = d3.extent(rows, (row) => row.date);
+  return extent[0]?.getTime() === extent[1]?.getTime()
+    ? [interval.offset(extent[0], -1), interval.offset(extent[1], 1)]
+    : extent;
+}
+
+function spendingRowsInAssetRange() {
+  return rowsInAssetRange(financeData.spending)
+    .filter((row) => (
+      row.category !== "Extracted Value"
+      && (!assetsTuitionNormalized || row.category !== "Tuition")
+      && numberValue(row.amount) > 0
+    ));
+}
+
+function monthlySpendingBuckets() {
+  const rows = spendingRowsInAssetRange();
+  if (!rows.length) {
+    return { rows: [], completedAverage: 0 };
+  }
+  const today = startOfDay(new Date());
+  const currentMonth = d3.timeMonth.floor(today);
+  const firstDate = d3.min(rows, (row) => parseAppDate(row.date));
+  const firstMonth = d3.timeMonth.floor(firstDate);
+  const monthStarts = d3.timeMonth.range(firstMonth, d3.timeMonth.offset(currentMonth, 1));
+  const key = d3.timeFormat("%Y-%m");
+  const buckets = new Map(monthStarts.map((date) => [key(date), { date, value: 0, income: 0, byCategory: new Map() }]));
+  for (const row of rows) {
+    const bucket = buckets.get(key(parseAppDate(row.date)));
+    if (!bucket) continue;
+    const amount = numberValue(row.amount);
+    const category = row.category || "Uncategorized";
+    bucket.value += amount;
+    bucket.byCategory.set(category, (bucket.byCategory.get(category) || 0) + amount);
+  }
+  for (const row of rowsInAssetRange(financeData.income).filter((entry) => numberValue(entry.amount) > 0)) {
+    const bucket = buckets.get(key(parseAppDate(row.date)));
+    if (bucket) {
+      bucket.income += numberValue(row.amount);
+    }
+  }
+  const monthlyRows = [...buckets.values()];
+  const completeRows = monthlyRows.filter((row) => row.date < currentMonth);
+  const averageRows = completeRows.length ? completeRows : monthlyRows;
+  return {
+    rows: monthlyRows,
+    completedAverage: d3.mean(averageRows, (row) => row.value) || 0
+  };
+}
+
+function dailySpendingBuckets() {
+  const spendingRows = spendingRowsInAssetRange();
+  const incomeRows = rowsInAssetRange(financeData.income).filter((row) => numberValue(row.amount) > 0);
+  const datedRows = [...spendingRows, ...incomeRows]
+    .map((row) => ({ ...row, parsedDate: parseAppDate(row.date) }))
+    .filter((row) => row.parsedDate && !Number.isNaN(row.parsedDate.getTime()));
+  if (!datedRows.length) {
+    return { rows: [], completedAverage: 0 };
   }
 
-  clearAssetChart(assetsNetWorthChart);
-  const { width, height } = assetChartSize(assetsNetWorthChart, 720, 310);
-  const margin = { top: 18, right: 18, bottom: 30, left: 58 };
-  const x = d3.scaleTime().domain(d3.extent(points, (row) => row.date)).range([margin.left, width - margin.right]);
-  const valueExtent = d3.extent(points.flatMap((row) => [row.value, 0]));
-  const padding = Math.max((valueExtent[1] - valueExtent[0]) * 0.12, 100);
-  const y = d3.scaleLinear().domain([valueExtent[0] - padding, valueExtent[1] + padding]).nice().range([height - margin.bottom, margin.top]);
-  const svg = d3.select(assetsNetWorthChart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", "Estimated net worth over the selected time range");
-  const yTicks = y.ticks(5);
-  svg.selectAll(".assets-chart-grid-line").data(yTicks).join("line")
-    .attr("class", "assets-chart-grid-line")
-    .attr("x1", margin.left).attr("x2", width - margin.right)
-    .attr("y1", (value) => y(value)).attr("y2", (value) => y(value));
-  svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`)
-    .call(d3.axisBottom(x).ticks(Math.min(6, points.length)).tickFormat(d3.timeFormat("%b %d")).tickSizeOuter(0));
-  svg.append("g").attr("transform", `translate(${margin.left},0)`)
-    .call(d3.axisLeft(y).ticks(5).tickFormat(assetMoneyTick).tickSize(0)).call((group) => group.select(".domain").remove());
-  const line = d3.line().x((row) => x(row.date)).y((row) => y(row.value)).curve(d3.curveMonotoneX);
-  svg.append("path").datum(points).attr("d", line).attr("fill", "none").attr("stroke", "#9FFCDF").attr("stroke-width", 2);
-  const focusLine = svg.append("line").attr("y1", margin.top).attr("y2", height - margin.bottom).attr("stroke", "rgba(255,255,255,.22)").attr("stroke-dasharray", "3 3").style("display", "none");
-  const focusDot = svg.append("circle").attr("r", 4).attr("fill", "#9FFCDF").attr("stroke", "#0C1116").attr("stroke-width", 2).style("display", "none");
-  const tooltip = assetChartTooltip(assetsNetWorthChart);
-  const bisect = d3.bisector((row) => row.date).center;
-  svg.append("rect").attr("x", margin.left).attr("y", margin.top).attr("width", width - margin.left - margin.right).attr("height", height - margin.top - margin.bottom).attr("fill", "transparent")
+  const today = startOfDay(new Date());
+  const firstDate = d3.timeDay.floor(d3.min(datedRows, (row) => row.parsedDate));
+  const dayStarts = d3.timeDay.range(firstDate, d3.timeDay.offset(today, 1));
+  const key = d3.timeFormat("%Y-%m-%d");
+  const buckets = new Map(dayStarts.map((date) => [key(date), { date, value: 0, income: 0, byCategory: new Map() }]));
+  for (const row of spendingRows) {
+    const bucket = buckets.get(key(parseAppDate(row.date)));
+    if (!bucket) continue;
+    const amount = numberValue(row.amount);
+    const category = row.category || "Uncategorized";
+    bucket.value += amount;
+    bucket.byCategory.set(category, (bucket.byCategory.get(category) || 0) + amount);
+  }
+  for (const row of incomeRows) {
+    const bucket = buckets.get(key(parseAppDate(row.date)));
+    if (bucket) bucket.income += numberValue(row.amount);
+  }
+  const dailyRows = [...buckets.values()];
+  const completeRows = dailyRows.filter((row) => row.date < today);
+  const averageRows = completeRows.length ? completeRows : dailyRows;
+  return {
+    rows: dailyRows,
+    completedAverage: d3.mean(averageRows, (row) => row.value) || 0
+  };
+}
+
+function renderDailySpendingChart(daily) {
+  const { rows, completedAverage } = daily;
+  if (!rows.length) {
+    renderAssetChartEmpty(assetsMonthlySpendingChart, "Add dated income or spending to build a daily trend.");
+    return;
+  }
+  clearAssetChart(assetsMonthlySpendingChart);
+  const { width, height } = assetChartSize(assetsMonthlySpendingChart, 720, 310);
+  const margin = { top: 20, right: 58, bottom: 32, left: 58 };
+  const x = d3.scaleTime().domain(assetDateDomain(rows)).range([margin.left, width - margin.right]);
+  const incomeMax = d3.max(rows, (row) => row.income) || 1;
+  const spendingMax = d3.max([...rows.map((row) => row.value), completedAverage]) || 1;
+  const yIncome = d3.scaleLinear().domain([0, incomeMax]).nice().range([height - margin.bottom, margin.top]);
+  const ySpending = d3.scaleLinear().domain([0, spendingMax]).nice().range([height - margin.bottom, margin.top]);
+  const svg = d3.select(assetsMonthlySpendingChart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", "Daily income on the left scale and daily spending on the right scale");
+  svg.selectAll(".assets-chart-grid-line").data(ySpending.ticks(5)).join("line").attr("class", "assets-chart-grid-line").attr("x1", margin.left).attr("x2", width - margin.right).attr("y1", ySpending).attr("y2", ySpending);
+  const tickEvery = Math.max(1, Math.ceil(rows.length / 8));
+  const ticks = rows.filter((_, index) => index % tickEvery === 0).map((row) => row.date);
+  svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).tickValues(ticks).tickFormat(d3.timeFormat("%b %d")).tickSizeOuter(0));
+  svg.append("g").attr("class", "assets-chart-axis-income").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(yIncome).ticks(5).tickFormat(assetMoneyTick).tickSize(0)).call((group) => group.select(".domain").remove());
+  svg.append("g").attr("class", "assets-chart-axis-spending").attr("transform", `translate(${width - margin.right},0)`).call(d3.axisRight(ySpending).ticks(5).tickFormat(assetMoneyTick).tickSize(0)).call((group) => group.select(".domain").remove());
+  const tooltip = assetChartTooltip(assetsMonthlySpendingChart);
+  for (const series of [
+    { key: "income", color: "#9FFCDF", scale: yIncome },
+    { key: "value", color: "#ef8f8f", scale: ySpending }
+  ]) {
+    const seriesName = series.key === "value" ? "spending" : series.key;
+    const line = d3.line().x((row) => x(row.date)).y((row) => series.scale(row[series.key])).curve(d3.curveLinear);
+    svg.append("path").datum(rows).attr("class", `daily-${seriesName}-line`).attr("d", line).attr("fill", "none").attr("stroke", series.color).attr("stroke-width", 2).attr("stroke-linecap", "butt").attr("stroke-linejoin", "miter");
+  }
+  if (completedAverage > 0) {
+    svg.append("line").attr("x1", margin.left).attr("x2", width - margin.right).attr("y1", ySpending(completedAverage)).attr("y2", ySpending(completedAverage)).attr("stroke", "rgba(239,143,143,.6)").attr("stroke-dasharray", "5 4");
+    svg.append("text").attr("x", width - margin.right - 5).attr("y", Math.max(margin.top + 10, ySpending(completedAverage) - 7)).attr("text-anchor", "end").attr("fill", "rgba(239,143,143,.78)").attr("font-size", 10).text(`Daily avg ${assetMoneyTick(completedAverage)}`);
+  }
+
+  const focus = svg.append("g").attr("class", "assets-chart-focus").style("display", "none");
+  const crosshair = focus.append("line").attr("class", "assets-chart-crosshair").attr("y1", margin.top).attr("y2", height - margin.bottom);
+  const incomeMarker = focus.append("rect").attr("width", 7).attr("height", 7).attr("x", -3.5).attr("y", -3.5).attr("fill", "#9FFCDF");
+  const spendingMarker = focus.append("rect").attr("width", 7).attr("height", 7).attr("x", -3.5).attr("y", -3.5).attr("fill", "#ef8f8f");
+  const nearestDay = d3.bisector((row) => row.date).center;
+  svg.append("rect")
+    .attr("class", "assets-chart-hit-area")
+    .attr("x", margin.left)
+    .attr("y", margin.top)
+    .attr("width", width - margin.left - margin.right)
+    .attr("height", height - margin.top - margin.bottom)
+    .attr("fill", "transparent")
     .on("pointermove", (event) => {
-      const [pointerX] = d3.pointer(event);
-      const row = points[bisect(points, x.invert(pointerX))];
-      focusLine.attr("x1", x(row.date)).attr("x2", x(row.date)).style("display", null);
-      focusDot.attr("cx", x(row.date)).attr("cy", y(row.value)).style("display", null);
-      positionAssetTooltip(tooltip, event, assetsNetWorthChart, `<span>${d3.timeFormat("%b %d, %Y")(row.date)}</span><strong>${money(row.value)}</strong><span>Assets ${money(row.assets)} · Debt ${money(row.debt)}</span>`);
+      const pointerX = d3.pointer(event, svg.node())[0];
+      const row = rows[nearestDay(rows, x.invert(pointerX))];
+      const markerX = x(row.date);
+      focus.style("display", null);
+      crosshair.attr("x1", markerX).attr("x2", markerX);
+      incomeMarker.attr("transform", `translate(${markerX},${yIncome(row.income)})`);
+      spendingMarker.attr("transform", `translate(${markerX},${ySpending(row.value)})`);
+      positionAssetTooltip(tooltip, event, assetsMonthlySpendingChart, [
+        { text: `${d3.timeFormat("%B %d, %Y")(row.date)}${row === rows.at(-1) ? " · today" : ""}` },
+        { text: `Income ${money(row.income)}`, strong: true },
+        { text: `Spending ${money(row.value)}`, strong: true },
+        { text: `Daily spending average ${money(completedAverage)}` }
+      ]);
     })
     .on("pointerleave", () => {
-      focusLine.style("display", "none");
-      focusDot.style("display", "none");
+      focus.style("display", "none");
       tooltip.hidden = true;
     });
 }
@@ -992,117 +1159,185 @@ function renderAccountBalancesChart() {
     .attr("width", (row) => Math.max(2, Math.abs(x(row.value) - x(0))))
     .attr("height", y.bandwidth())
     .attr("fill", (row) => row.debt ? "#e58b8b" : "#52AD9C")
-    .on("pointermove", (event, row) => positionAssetTooltip(tooltip, event, assetsBalancesChart, `<span>${row.meta}</span><strong>${money(row.value)}</strong><span>Current ${row.current === null ? "—" : money(row.current)} · Available ${row.available === null ? "—" : money(row.available)} · ${row.currency}</span>`))
+    .on("pointermove", (event, row) => positionAssetTooltip(tooltip, event, assetsBalancesChart, [
+      { text: row.meta },
+      { text: money(row.value), strong: true },
+      { text: `Current ${row.current === null ? "—" : money(row.current)} · Available ${row.available === null ? "—" : money(row.available)} · ${row.currency}` }
+    ]))
     .on("pointerleave", () => { tooltip.hidden = true; });
 }
 
-function cashFlowBuckets() {
-  const start = assetRangeStart();
+function categoryTrendData(monthly, daily) {
+  const currentMonth = d3.timeMonth.floor(new Date());
+  const averageRows = monthly.rows.some((row) => row.date < currentMonth)
+    ? monthly.rows.filter((row) => row.date < currentMonth)
+    : monthly.rows;
+  const categories = new Set();
+  for (const row of daily.rows) {
+    for (const category of row.byCategory.keys()) categories.add(category);
+  }
+  return [...categories].map((name) => {
+    const points = daily.rows.map((row) => ({ date: row.date, value: row.byCategory.get(name) || 0 }));
+    return {
+      name,
+      points,
+      total: d3.sum(points, (row) => row.value),
+      average: d3.mean(averageRows, (row) => row.byCategory.get(name) || 0) || 0
+    };
+  }).filter((category) => category.total > 0).sort((a, b) => b.total - a.total);
+}
+
+function renderCategoryTrends(categories) {
+  assetsCategoryTrends.replaceChildren();
+  if (!categories.length) {
+    const empty = document.createElement("div");
+    empty.className = "assets-chart-empty";
+    empty.textContent = "No categorized spending is recorded in this range.";
+    assetsCategoryTrends.append(empty);
+    return;
+  }
+  for (const category of categories) {
+    const card = document.createElement("article");
+    card.className = "category-trend-card";
+    const head = document.createElement("div");
+    head.className = "category-trend-head";
+    const name = document.createElement("strong");
+    name.textContent = category.name;
+    const average = document.createElement("span");
+    average.textContent = `${money(category.average)} avg / mo`;
+    head.append(name, average);
+    const chart = document.createElement("div");
+    chart.className = "category-trend-chart";
+    card.append(head, chart);
+    assetsCategoryTrends.append(card);
+
+    const width = Math.max(chart.clientWidth || 280, 240);
+    const height = 105;
+    const margin = { top: 8, right: 5, bottom: 20, left: 5 };
+    const x = d3.scaleTime().domain(assetDateDomain(category.points)).range([margin.left, width - margin.right]);
+    const y = d3.scaleLinear().domain([0, d3.max(category.points, (row) => row.value) || 1]).nice().range([height - margin.bottom, margin.top]);
+    const svg = d3.select(chart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", `${category.name} daily spending`);
+    const tooltip = assetChartTooltip(chart);
+    const line = d3.line().x((row) => x(row.date)).y((row) => y(row.value)).curve(d3.curveLinear);
+    svg.append("path").datum(category.points).attr("class", "category-day-line").attr("d", line).attr("fill", "none").attr("stroke", "#52AD9C").attr("stroke-width", 1.5).attr("stroke-linecap", "butt").attr("stroke-linejoin", "miter");
+    const focus = svg.append("g").attr("class", "assets-chart-focus").style("display", "none");
+    const crosshair = focus.append("line").attr("class", "assets-chart-crosshair").attr("y1", margin.top).attr("y2", height - margin.bottom);
+    const marker = focus.append("rect").attr("width", 6).attr("height", 6).attr("x", -3).attr("y", -3).attr("fill", "#52AD9C");
+    const tickEvery = Math.max(1, Math.ceil(category.points.length / 4));
+    const ticks = category.points.filter((_, index) => index % tickEvery === 0).map((row) => row.date);
+    svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).tickValues(ticks).tickFormat(d3.timeFormat("%b %d")).tickSize(0)).call((group) => group.select(".domain").remove());
+    const nearestDay = d3.bisector((row) => row.date).center;
+    svg.append("rect").attr("class", "assets-chart-hit-area").attr("x", margin.left).attr("y", margin.top).attr("width", width - margin.left - margin.right).attr("height", height - margin.top - margin.bottom).attr("fill", "transparent")
+      .on("pointermove", (event) => {
+        const pointerX = d3.pointer(event, svg.node())[0];
+        const row = category.points[nearestDay(category.points, x.invert(pointerX))];
+        const markerX = x(row.date);
+        focus.style("display", null);
+        crosshair.attr("x1", markerX).attr("x2", markerX);
+        marker.attr("transform", `translate(${markerX},${y(row.value)})`);
+        positionAssetTooltip(tooltip, event, chart, [
+          { text: d3.timeFormat("%B %d, %Y")(row.date) },
+          { text: money(row.value), strong: true }
+        ]);
+      })
+      .on("pointerleave", () => {
+        focus.style("display", "none");
+        tooltip.hidden = true;
+      });
+  }
+}
+
+function spendingInsights(monthly, categories) {
+  if (!monthly.rows.length) return [];
   const today = startOfDay(new Date());
-  const weekly = assetsChartRange === "30d" || assetsChartRange === "90d";
-  const floor = weekly ? d3.timeWeek.floor : d3.timeMonth.floor;
-  const offset = weekly ? d3.timeWeek.offset : d3.timeMonth.offset;
-  const formatKey = d3.timeFormat("%Y-%m-%d");
-  const starts = [];
-  for (let date = floor(start); date <= today; date = offset(date, 1)) {
-    starts.push(date);
+  const currentMonth = d3.timeMonth.floor(today);
+  const completed = monthly.rows.filter((row) => row.date < currentMonth);
+  const current = monthly.rows.find((row) => row.date.getTime() === currentMonth.getTime());
+  const insights = [];
+  if (current && monthly.completedAverage > 0) {
+    const daysInMonth = d3.timeDay.count(currentMonth, d3.timeMonth.offset(currentMonth, 1));
+    const elapsedDays = Math.max(1, today.getDate());
+    const projected = current.value / elapsedDays * daysInMonth;
+    const difference = projected - monthly.completedAverage;
+    insights.push({
+      label: "Current pace",
+      value: money(projected),
+      detail: `${Math.abs(difference / monthly.completedAverage * 100).toFixed(0)}% ${difference >= 0 ? "above" : "below"} your completed-month average if this pace holds.`
+    });
   }
-  const buckets = new Map(starts.map((date) => [formatKey(date), { date, income: 0, spending: 0 }]));
-  for (const row of assetDatedRows()) {
-    if (row.dateValue < start || row.dateValue > today) {
-      continue;
-    }
-    const bucket = buckets.get(formatKey(floor(row.dateValue)));
-    if (bucket) {
-      bucket[row.kind] += numberValue(row.amount);
+  const top = categories[0];
+  const total = d3.sum(categories, (category) => category.total);
+  if (top && total > 0) {
+    insights.push({
+      label: "Largest category",
+      value: top.name,
+      detail: `${money(top.total)} in range, or ${(top.total / total * 100).toFixed(0)}% of analyzed spending.`
+    });
+  }
+  if (completed.length >= 2) {
+    const latest = completed.at(-1);
+    const previous = completed.at(-2);
+    const difference = latest.value - previous.value;
+    insights.push({
+      label: "Last complete month",
+      value: `${difference >= 0 ? "+" : ""}${money(difference)}`,
+      detail: `${d3.timeFormat("%B")(latest.date)} spending was ${difference >= 0 ? "higher" : "lower"} than ${d3.timeFormat("%B")(previous.date)}.`
+    });
+    const changes = categories.map((category) => ({
+      name: category.name,
+      difference: (latest.byCategory.get(category.name) || 0) - (previous.byCategory.get(category.name) || 0)
+    })).sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+    const biggest = changes[0];
+    if (biggest && biggest.difference) {
+      insights.push({
+        label: "Biggest category shift",
+        value: biggest.name,
+        detail: `${biggest.difference >= 0 ? "+" : ""}${money(biggest.difference)} from ${d3.timeFormat("%B")(previous.date)} to ${d3.timeFormat("%B")(latest.date)}.`
+      });
     }
   }
-  return { rows: [...buckets.values()], weekly };
+  return insights.slice(0, 4);
 }
 
-function renderCashFlowChart(cashFlow = cashFlowBuckets()) {
-  const { rows, weekly } = cashFlow;
-  if (!rows.some((row) => row.income || row.spending)) {
-    renderAssetChartEmpty(assetsCashFlowChart, "Add dated income and spending to see cash flow.");
+function renderSpendingInsights(insights) {
+  assetsInsights.replaceChildren();
+  if (!insights.length) {
+    const empty = document.createElement("div");
+    empty.className = "assets-insight-empty";
+    empty.textContent = "Add at least two months of dated spending to unlock comparisons.";
+    assetsInsights.append(empty);
     return;
   }
-
-  clearAssetChart(assetsCashFlowChart);
-  const { width, height } = assetChartSize(assetsCashFlowChart);
-  const margin = { top: 18, right: 12, bottom: 30, left: 52 };
-  const x = d3.scaleBand().domain(rows.map((row) => row.date.getTime())).range([margin.left, width - margin.right]).padding(0.2);
-  const maxValue = d3.max(rows, (row) => Math.max(row.income, row.spending)) || 1;
-  const y = d3.scaleLinear().domain([0, maxValue]).nice().range([height - margin.bottom, margin.top]);
-  const subgroup = d3.scaleBand().domain(["income", "spending"]).range([0, x.bandwidth()]).padding(0.12);
-  const svg = d3.select(assetsCashFlowChart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", "Income and spending cash flow");
-  svg.selectAll(".assets-chart-grid-line").data(y.ticks(4)).join("line").attr("class", "assets-chart-grid-line").attr("x1", margin.left).attr("x2", width - margin.right).attr("y1", y).attr("y2", y);
-  const tickEvery = Math.max(1, Math.ceil(rows.length / 5));
-  const tickValues = rows.filter((_, index) => index % tickEvery === 0).map((row) => row.date.getTime());
-  svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).tickValues(tickValues).tickFormat((value) => d3.timeFormat(weekly ? "%b %d" : "%b")(new Date(value))).tickSizeOuter(0));
-  svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(4).tickFormat(assetMoneyTick).tickSize(0)).call((group) => group.select(".domain").remove());
-  const tooltip = assetChartTooltip(assetsCashFlowChart);
-  for (const kind of ["income", "spending"]) {
-    svg.selectAll(`.cash-flow-${kind}`).data(rows).join("rect")
-      .attr("x", (row) => x(row.date.getTime()) + subgroup(kind))
-      .attr("y", (row) => y(row[kind]))
-      .attr("width", subgroup.bandwidth())
-      .attr("height", (row) => height - margin.bottom - y(row[kind]))
-      .attr("fill", kind === "income" ? "#9FFCDF" : "#6c7f91")
-      .on("pointermove", (event, row) => positionAssetTooltip(tooltip, event, assetsCashFlowChart, `<span>${d3.timeFormat(weekly ? "Week of %b %d" : "%B %Y")(row.date)}</span><strong>${kind === "income" ? "Income" : "Spending"} ${money(row[kind])}</strong><span>Net ${money(row.income - row.spending)}</span>`))
-      .on("pointerleave", () => { tooltip.hidden = true; });
+  for (const insight of insights) {
+    const card = document.createElement("article");
+    card.className = "assets-insight-card";
+    const label = document.createElement("span");
+    label.textContent = insight.label;
+    const value = document.createElement("strong");
+    value.textContent = insight.value;
+    const detail = document.createElement("p");
+    detail.textContent = insight.detail;
+    card.append(label, value, detail);
+    assetsInsights.append(card);
   }
-}
-
-function assetSpendingTotals() {
-  return d3.rollups(rowsInAssetRange(financeData.spending), (rows) => d3.sum(rows, (row) => numberValue(row.amount)), (row) => row.category || "Uncategorized")
-    .map(([name, value]) => ({ name, value }))
-    .filter((row) => row.value > 0)
-    .sort((a, b) => b.value - a.value);
-}
-
-function renderSpendingChart(totals = assetSpendingTotals()) {
-  if (!totals.length) {
-    renderAssetChartEmpty(assetsSpendingChart, "No spending is recorded in this range.");
-    return;
-  }
-
-  const visible = totals.slice(0, 8);
-  if (totals.length > 8) {
-    visible.push({ name: "Other", value: d3.sum(totals.slice(8), (row) => row.value) });
-  }
-  clearAssetChart(assetsSpendingChart);
-  const { width } = assetChartSize(assetsSpendingChart, 720);
-  const height = Math.max(250, visible.length * 31 + 40);
-  const margin = { top: 8, right: 62, bottom: 25, left: Math.min(165, width * 0.3) };
-  const x = d3.scaleLinear().domain([0, d3.max(visible, (row) => row.value)]).nice().range([margin.left, width - margin.right]);
-  const y = d3.scaleBand().domain(visible.map((row) => row.name)).range([margin.top, height - margin.bottom]).padding(0.32);
-  const svg = d3.select(assetsSpendingChart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", "Spending totals by category");
-  svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).ticks(5).tickFormat(assetMoneyTick).tickSizeOuter(0));
-  svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y).tickSize(0)).call((group) => group.select(".domain").remove());
-  const tooltip = assetChartTooltip(assetsSpendingChart);
-  svg.selectAll(".spending-category-bar").data(visible).join("rect")
-    .attr("x", margin.left).attr("y", (row) => y(row.name)).attr("width", (row) => x(row.value) - margin.left).attr("height", y.bandwidth()).attr("fill", "#52AD9C")
-    .on("pointermove", (event, row) => positionAssetTooltip(tooltip, event, assetsSpendingChart, `<span>${row.name}</span><strong>${money(row.value)}</strong>`))
-    .on("pointerleave", () => { tooltip.hidden = true; });
-  svg.selectAll(".spending-category-value").data(visible).join("text").attr("x", (row) => x(row.value) + 7).attr("y", (row) => y(row.name) + y.bandwidth() / 2 + 4).attr("fill", "rgba(255,255,255,.68)").attr("font-size", 10).text((row) => assetMoneyTick(row.value));
 }
 
 function assetsCalculation() {
-  const key = `${assetsChartRange}:${assetsDataSignature()}`;
+  const key = `${assetsChartRange}:${assetsTuitionNormalized}:${assetsDataSignature()}`;
   const cached = assetsCalculationCache.get(key);
   if (cached) {
     return cached;
   }
 
-  const points = netWorthTimeline();
-  const cashFlow = cashFlowBuckets();
-  const spendingTotals = assetSpendingTotals();
+  const monthly = monthlySpendingBuckets();
+  const daily = dailySpendingBuckets();
+  const categories = categoryTrendData(monthly, daily);
   const calculation = {
     key,
-    points,
-    cashFlow,
-    spendingTotals,
-    rangeSpending: sumRows(rowsInAssetRange(financeData.spending))
+    monthly,
+    daily,
+    categories,
+    insights: spendingInsights(monthly, categories)
   };
   assetsCalculationCache.set(key, calculation);
   while (assetsCalculationCache.size > 8) {
@@ -1114,15 +1349,14 @@ function assetsCalculation() {
 function assetsChartLayoutKey(calculation) {
   return [
     calculation.key,
-    assetsNetWorthChart?.clientWidth || 0,
+    assetsMonthlySpendingChart?.clientWidth || 0,
     assetsBalancesChart?.clientWidth || 0,
-    assetsCashFlowChart?.clientWidth || 0,
-    assetsSpendingChart?.clientWidth || 0
+    assetsCategoryTrends?.clientWidth || 0
   ].join(":");
 }
 
 function renderAssetsGraphs() {
-  if (!assetsNetWorthChart || document.querySelector('[data-page="assets"]')?.hidden) {
+  if (!assetsMonthlySpendingChart || document.querySelector('[data-page="assets"]')?.hidden) {
     return;
   }
   const calculation = assetsCalculation();
@@ -1130,15 +1364,19 @@ function renderAssetsGraphs() {
   if (renderKey === assetsRenderedKey) {
     return;
   }
-  const { points } = calculation;
-  const first = points[0]?.value || 0;
-  const last = points.at(-1)?.value || 0;
-  const change = last - first;
-  assetsNetWorthChange.textContent = `${change >= 0 ? "+" : ""}${money(change)} in range`;
-  renderNetWorthChart(points);
+  const completed = calculation.daily.rows.filter((row) => row.date < startOfDay(new Date()));
+  const previous = completed.at(-2);
+  const latest = completed.at(-1);
+  const spendingChange = previous && latest ? latest.value - previous.value : null;
+  assetsSpendingChange.textContent = previous && latest
+    ? `Spending ${spendingChange >= 0 ? "+" : ""}${money(spendingChange)} vs prior day`
+    : "Need 2 complete days";
+  assetsSpendingChange.classList.toggle("is-spending-up", spendingChange > 0);
+  assetsSpendingChange.classList.toggle("is-spending-down", spendingChange < 0);
+  renderDailySpendingChart(calculation.daily);
   renderAccountBalancesChart();
-  renderCashFlowChart(calculation.cashFlow);
-  renderSpendingChart(calculation.spendingTotals);
+  renderCategoryTrends(calculation.categories);
+  renderSpendingInsights(calculation.insights);
   assetsRenderedKey = renderKey;
 }
 
@@ -1147,11 +1385,11 @@ function renderAssets() {
   const cash = cashAccountsTotal();
   const debt = connectedDebtTotal() + manualDebtAtDate(today);
   const netWorth = connectedAssetsTotal() - debt;
-  const rangeSpending = assetsCalculation().rangeSpending;
+  const averageSpending = assetsCalculation().monthly.completedAverage;
   assetsCashTotal.textContent = money(cash);
   assetsNetWorth.textContent = money(netWorth);
   assetsDebt.textContent = money(debt);
-  assetsRangeSpending.textContent = money(rangeSpending);
+  assetsAverageSpending.textContent = money(averageSpending);
   requestAnimationFrame(renderAssetsGraphs);
 }
 
@@ -3694,16 +3932,34 @@ function renderBudgetBuilder() {
   }
 }
 
+const spendingChartColors = [
+  "#9ffcdf",
+  "#86ead3",
+  "#6dd8c5",
+  "#58c4b6",
+  "#52ada8",
+  "#5597a1",
+  "#5c859a",
+  "#68768f",
+  "#776f8a",
+  "#887080",
+  "#967a74",
+  "#8a8b70",
+  "#748f7b",
+  "#668786"
+];
+
 function renderCategoryBreakdown(categoryTotals) {
   const sortedCategories = ledgerConfig.spending.categories
-    .filter((category) => category !== "Set Category")
+    .filter((category) => !["Set Category", "Extracted Value", "Tuition"].includes(category))
     .sort((a, b) => (categoryTotals[b] || 0) - (categoryTotals[a] || 0));
 
   summaryElements.categoryBreakdown.replaceChildren(
     ...sortedCategories
-      .map((category) => {
+      .map((category, index) => {
         const row = document.createElement("div");
         row.className = "category-total";
+        row.style.setProperty("--category-color", spendingChartColors[index % spendingChartColors.length]);
         row.append(document.createElement("span"));
         row.append(document.createElement("strong"));
         row.children[0].textContent = category;
@@ -3782,14 +4038,15 @@ function spreadChartLabels(labels, minimumY, maximumY) {
 }
 
 function renderDonut(categoryTotals, totalSpending) {
-  const width = 390;
-  const height = 250;
+  const width = 430;
+  const height = 340;
   const centerX = width / 2;
   const centerY = height / 2;
-  const outerRadius = 70;
-  const innerRadius = 39;
-  const shades = ["#ffffff", "#e9edf2", "#d3d9e0", "#bac3cc", "#a4adb7", "#8d98a3"];
-  const categories = Object.entries(categoryTotals).filter(([, amount]) => amount > 0);
+  const outerRadius = 82;
+  const innerRadius = 47;
+  const categories = Object.entries(categoryTotals)
+    .filter(([, amount]) => amount > 0)
+    .sort(([, amountA], [, amountB]) => amountB - amountA);
   const svg = chartElement("svg", {
     viewBox: `0 0 ${width} ${height}`,
     role: "img",
@@ -3830,7 +4087,9 @@ function renderDonut(categoryTotals, totalSpending) {
 
     svg.append(chartElement("path", {
       d: donutArcPath(centerX, centerY, outerRadius, innerRadius, startAngle, endAngle),
-      fill: shades[index % shades.length]
+      fill: spendingChartColors[index % spendingChartColors.length],
+      stroke: "var(--page)",
+      "stroke-width": 1.5
     }));
 
     labels.push({
@@ -3842,8 +4101,8 @@ function renderDonut(categoryTotals, totalSpending) {
     });
   });
 
-  spreadChartLabels(labels.filter((label) => label.side === "left"), 18, height - 18);
-  spreadChartLabels(labels.filter((label) => label.side === "right"), 18, height - 18);
+  spreadChartLabels(labels.filter((label) => label.side === "left"), 24, height - 24);
+  spreadChartLabels(labels.filter((label) => label.side === "right"), 24, height - 24);
 
   for (const label of labels) {
     const isRight = label.side === "right";
@@ -3884,10 +4143,16 @@ function renderDonut(categoryTotals, totalSpending) {
 function renderSummary(data) {
   const categoryTotals = {};
   let extractedValue = 0;
+  let tuition = 0;
   const totalSpending = data.spending.reduce((total, row) => {
     const amount = numberValue(row.amount);
     if (row.category === "Extracted Value") {
       extractedValue += amount;
+      categoryTotals[row.category] = (categoryTotals[row.category] || 0) + amount;
+      return total;
+    }
+    if (row.category === "Tuition") {
+      tuition += amount;
       categoryTotals[row.category] = (categoryTotals[row.category] || 0) + amount;
       return total;
     }
@@ -3901,7 +4166,8 @@ function renderSummary(data) {
   const currentBudget = currentBudgetForToday(data.budgets || []);
   const currentBudgetSpending = currentBudget
     ? data.spending.reduce((total, row) => (
-      inDateRange(row.date, currentBudget.startDate, currentBudget.endDate)
+      !["Extracted Value", "Tuition"].includes(row.category)
+        && inDateRange(row.date, currentBudget.startDate, currentBudget.endDate)
         ? total + numberValue(row.amount)
         : total
     ), 0)
@@ -3913,17 +4179,21 @@ function renderSummary(data) {
   summaryElements.currentBudgetSpending.textContent = money(currentBudgetSpending);
   summaryElements.totalSpending.textContent = money(totalSpending);
   summaryElements.extractedValue.textContent = money(extractedValue);
+  summaryElements.tuition.textContent = money(tuition);
   summaryElements.totalIncome.textContent = money(totalIncome);
   summaryElements.gdpContribution.textContent = money(gdpContribution);
   renderCategoryBreakdown(categoryTotals);
   renderDonut(
-    Object.fromEntries(Object.entries(categoryTotals).filter(([category]) => category !== "Extracted Value")),
+    Object.fromEntries(Object.entries(categoryTotals).filter(([category]) => !["Extracted Value", "Tuition"].includes(category))),
     totalSpending
   );
 }
 
 function render(data) {
   financeData = { ...financeData, ...data };
+  if (Array.isArray(data.plaidConnections)) {
+    plaidConnections = data.plaidConnections;
+  }
   updateLedgerCategories(data.categories);
   pendingPlaidTransactions = data.plaidTransactions || pendingPlaidTransactions || [];
   skippedPlaidTransactions = data.plaidSkippedTransactions || skippedPlaidTransactions || [];
@@ -4147,13 +4417,13 @@ function renderPlaidSkippedTransactions() {
   }
 }
 
-async function syncPlaidTransactions() {
+async function syncPlaidTransactions(force = false) {
   if (plaidSyncPromise) {
     return plaidSyncPromise;
   }
 
-  plaidStatus.textContent = "Checking Plaid...";
-  plaidSyncPromise = api("/api/plaid/transactions/sync", { method: "POST" })
+  plaidStatus.textContent = force ? "Refreshing Plaid..." : "Checking saved Plaid data...";
+  plaidSyncPromise = api(`/api/plaid/transactions/sync${force ? "?force=1" : ""}`, { method: "POST" })
     .then((result) => {
       pendingPlaidTransactions = result.pending || [];
       skippedPlaidTransactions = result.skipped || skippedPlaidTransactions;
@@ -4180,20 +4450,25 @@ async function syncPlaidTransactions() {
   return plaidSyncPromise;
 }
 
-function refreshPlaidAccounts() {
+function refreshPlaidAccounts(force = false) {
   if (plaidAccountsPromise) {
     return plaidAccountsPromise;
   }
 
-  plaidAccountsStatus = "Refreshing...";
+  plaidAccountsStatus = force ? "Refreshing..." : "Loading saved balances...";
   if (plaidManagerDialog.open) {
     renderPlaidManager();
   }
-  plaidAccountsPromise = api("/api/plaid/accounts")
+  plaidAccountsPromise = api(`/api/plaid/accounts${force ? "?force=1" : ""}`)
     .then((result) => {
       financeData = { ...financeData, plaidAccounts: result.accounts || [] };
       plaidConnections = result.connections || [];
-      plaidAccountsStatus = "";
+      plaidAccountsStatus = result.stale
+        ? "Using last saved balances"
+        : result.cached
+          ? "Saved today"
+          : "Updated now";
+      renderDebt();
       renderAssets();
       renderPlaidButton(plaidStatusText);
       if (plaidManagerDialog.open) {
@@ -4247,7 +4522,7 @@ async function renderCurrent(options = {}) {
   }
 
   if (options.syncPlaid) {
-    syncPlaidTransactions().then(async (result) => {
+    syncPlaidTransactions(options.syncPlaid === "force").then(async (result) => {
       if (result) {
         const refreshedData = await api("/api/finance");
         if (!financeLedgerIsEditing()) {
@@ -4261,7 +4536,7 @@ async function renderCurrent(options = {}) {
   }
 
   if (options.refreshPlaidAccounts) {
-    refreshPlaidAccounts();
+    refreshPlaidAccounts(options.refreshPlaidAccounts === "force");
   }
 }
 
@@ -4551,6 +4826,22 @@ document.querySelector("[data-open-assets-cash]").addEventListener("click", () =
 
 document.querySelector("[data-close-assets-cash]").addEventListener("click", () => {
   assetsCashDialog.close();
+});
+
+function syncAssetsNormalizeButton() {
+  assetsNormalizeButton.classList.toggle("is-active", assetsTuitionNormalized);
+  assetsNormalizeButton.setAttribute("aria-pressed", String(assetsTuitionNormalized));
+  assetsNormalizeButton.title = assetsTuitionNormalized
+    ? "Restore tuition to spending analytics"
+    : "Exclude tuition from spending analytics";
+}
+
+syncAssetsNormalizeButton();
+assetsNormalizeButton.addEventListener("click", () => {
+  assetsTuitionNormalized = !assetsTuitionNormalized;
+  localStorage.setItem(assetsTuitionNormalizedKey, String(assetsTuitionNormalized));
+  syncAssetsNormalizeButton();
+  renderAssets();
 });
 
 for (const button of assetsRangeButtons) {
@@ -4918,7 +5209,7 @@ plaidManagerButton.addEventListener("click", () => {
   plaidManagerDialog.showModal();
   refreshPlaidAccounts();
 });
-refreshPlaidAccountsButton.addEventListener("click", () => refreshPlaidAccounts());
+refreshPlaidAccountsButton.addEventListener("click", () => refreshPlaidAccounts(true));
 
 linkBankButton.addEventListener("click", async () => {
   linkBankButton.disabled = true;
@@ -4949,7 +5240,7 @@ linkBankButton.addEventListener("click", async () => {
           });
           linkedPlaidItems = exchangeResult.linkedItems || [];
           plaidStatusText = "";
-          await renderCurrent({ syncPlaid: true, refreshPlaidAccounts: true });
+          await renderCurrent({ syncPlaid: "force", refreshPlaidAccounts: "force" });
         } catch (error) {
           plaidStatusText = "Plaid Link failed";
           renderPlaidButton(plaidStatusText);

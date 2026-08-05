@@ -572,6 +572,52 @@ function setPortalMeta(key, value) {
   );
 }
 
+function localCalendarDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function readPlaidAccountCache() {
+  const payloadText = getPortalMeta("plaid_account_cache");
+  if (!payloadText) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(payloadText);
+    if (!Array.isArray(payload.accounts) || !Array.isArray(payload.connections)) {
+      return null;
+    }
+    return {
+      payload,
+      refreshedOn: getPortalMeta("plaid_account_cache_date"),
+      refreshedAt: getPortalMeta("plaid_account_cache_time"),
+      stale: getPortalMeta("plaid_account_cache_stale") === "true"
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePlaidAccountCache(payload, { stale = false } = {}) {
+  const now = new Date();
+  setPortalMeta("plaid_account_cache", JSON.stringify(payload));
+  setPortalMeta("plaid_account_cache_date", localCalendarDate(now));
+  setPortalMeta("plaid_account_cache_time", now.toISOString());
+  setPortalMeta("plaid_account_cache_stale", String(stale));
+}
+
+function cachedPlaidAccountResponse(cache, stale = cache.stale) {
+  return {
+    ...cache.payload,
+    cached: true,
+    stale,
+    refreshedOn: cache.refreshedOn,
+    refreshedAt: cache.refreshedAt
+  };
+}
+
 function listLoans() {
   const output = runSql(
     `SELECT id,
@@ -960,7 +1006,20 @@ async function requestPlaidAccountBalances(config, accessToken) {
   return Array.isArray(payload.accounts) ? payload.accounts : [];
 }
 
-async function listPlaidAccounts() {
+async function listPlaidAccounts({ force = false } = {}) {
+  const cache = readPlaidAccountCache();
+  const today = localCalendarDate();
+  if (!force && cache?.refreshedOn === today) {
+    return cachedPlaidAccountResponse(cache);
+  }
+  if (!force && getPortalMeta("plaid_account_attempt_date") === today) {
+    return cache
+      ? cachedPlaidAccountResponse(cache, true)
+      : { accounts: [], connections: [], cached: true, stale: true, refreshedOn: "", refreshedAt: "" };
+  }
+  setPortalMeta("plaid_account_attempt_date", today);
+  setPortalMeta("plaid_account_attempt_time", new Date().toISOString());
+
   const config = getPlaidConfig();
   const output = runSql(
     `SELECT item_id AS itemId,
@@ -984,7 +1043,9 @@ async function listPlaidAccounts() {
   }
 
   if (!config.configured || !connections.length) {
-    return { accounts: [], connections: [] };
+    return cache
+      ? cachedPlaidAccountResponse(cache, true)
+      : { accounts: [], connections: [], cached: false, stale: false, refreshedOn: "", refreshedAt: "" };
   }
 
   const accountGroups = await Promise.all(connections.map(async (connection) => {
@@ -1014,7 +1075,7 @@ async function listPlaidAccounts() {
     }
   }));
 
-  const accounts = accountGroups.flatMap((group) => group.accounts).map(({ account, connection }) => ({
+  const liveAccounts = accountGroups.flatMap((group) => group.accounts).map(({ account, connection }) => ({
     accountId: account.account_id || "",
     name: account.name || account.official_name || "",
     institutionId: connection.institutionId || "",
@@ -1028,9 +1089,48 @@ async function listPlaidAccounts() {
     }
   }));
 
+  const resultConnections = accountGroups.map((group) => group.connection);
+  const failedInstitutionIds = new Set(resultConnections
+    .filter((connection) => connection.status === "needs_attention")
+    .map((connection) => connection.institutionId)
+    .filter(Boolean));
+  const savedFailedAccounts = cache?.payload.accounts.filter((account) => failedInstitutionIds.has(account.institutionId)) || [];
+  const liveAccountIds = new Set(liveAccounts.map((account) => account.accountId));
+  const accounts = [
+    ...liveAccounts,
+    ...savedFailedAccounts.filter((account) => !liveAccountIds.has(account.accountId))
+  ];
+  const hasFailure = resultConnections.some((connection) => connection.status === "needs_attention");
+
+  if (!hasFailure) {
+    const payload = { accounts, connections: resultConnections };
+    writePlaidAccountCache(payload);
+    const refreshed = readPlaidAccountCache();
+    return {
+      ...payload,
+      cached: false,
+      stale: false,
+      refreshedOn: refreshed?.refreshedOn || today,
+      refreshedAt: refreshed?.refreshedAt || new Date().toISOString()
+    };
+  }
+
+  if (!accounts.length && cache) {
+    return cachedPlaidAccountResponse(cache, true);
+  }
+
+  if (accounts.length) {
+    writePlaidAccountCache({ accounts, connections: resultConnections }, { stale: true });
+  }
+  const partialCache = readPlaidAccountCache();
+
   return {
     accounts,
-    connections: accountGroups.map((group) => group.connection)
+    connections: resultConnections,
+    cached: Boolean(savedFailedAccounts.length),
+    stale: true,
+    refreshedOn: partialCache?.refreshedOn || cache?.refreshedOn || "",
+    refreshedAt: partialCache?.refreshedAt || cache?.refreshedAt || ""
   };
 }
 
@@ -1149,55 +1249,84 @@ async function syncPlaidItemTransactions(config, item) {
   return imported;
 }
 
-async function syncPlaidTransactions() {
+function plaidTransactionState(config, extras = {}) {
+  return {
+    configured: config.configured,
+    environment: config.environment,
+    linkedItems: listPlaidItems(),
+    imported: 0,
+    pending: listPlaidTransactions(),
+    skipped: listSkippedPlaidTransactions(),
+    ...extras
+  };
+}
+
+async function syncPlaidTransactions({ force = false } = {}) {
   const config = getPlaidConfig();
   const linkedItems = listPlaidSyncItems();
   const fallbackAccessTokens = process.env.PLAID_ACCESS_TOKEN ? [process.env.PLAID_ACCESS_TOKEN] : [];
+  const today = localCalendarDate();
+
+  if (!force && getPortalMeta("plaid_transaction_sync_date") === today) {
+    return plaidTransactionState(config, { cached: true, stale: false, syncedOn: today });
+  }
+  if (!force && getPortalMeta("plaid_transaction_sync_attempt_date") === today) {
+    return plaidTransactionState(config, {
+      cached: true,
+      stale: getPortalMeta("plaid_transaction_sync_date") !== today,
+      syncedOn: getPortalMeta("plaid_transaction_sync_date")
+    });
+  }
+  setPortalMeta("plaid_transaction_sync_attempt_date", today);
+  setPortalMeta("plaid_transaction_sync_attempt_time", new Date().toISOString());
 
   if (!config.configured || (!linkedItems.length && !fallbackAccessTokens.length)) {
-    return {
-      configured: config.configured,
-      environment: config.environment,
-      linkedItems: listPlaidItems(),
-      imported: 0,
-      pending: listPlaidTransactions(),
-      skipped: listSkippedPlaidTransactions()
-    };
+    return plaidTransactionState(config, { cached: true, stale: true, syncedOn: getPortalMeta("plaid_transaction_sync_date") });
   }
 
   let imported = 0;
 
-  for (const item of linkedItems) {
-    imported += await syncPlaidItemTransactions(config, item);
-  }
+  try {
+    for (const item of linkedItems) {
+      imported += await syncPlaidItemTransactions(config, item);
+    }
 
-  for (const accessToken of fallbackAccessTokens) {
-    let offset = 0;
-    let total = 0;
+    for (const accessToken of fallbackAccessTokens) {
+      let offset = 0;
+      let total = 0;
 
-    do {
-      const payload = await requestPlaidTransactions(config, accessToken, offset);
-      const transactions = Array.isArray(payload.transactions) ? payload.transactions : [];
-      total = Number(payload.total_transactions || transactions.length);
+      do {
+        const payload = await requestPlaidTransactions(config, accessToken, offset);
+        const transactions = Array.isArray(payload.transactions) ? payload.transactions : [];
+        total = Number(payload.total_transactions || transactions.length);
 
-      for (const transaction of transactions) {
-        if (queuePlaidTransaction(transaction)) {
-          imported += 1;
+        for (const transaction of transactions) {
+          if (queuePlaidTransaction(transaction)) {
+            imported += 1;
+          }
         }
-      }
 
-      offset += transactions.length;
-    } while (offset < total);
+        offset += transactions.length;
+      } while (offset < total);
+    }
+  } catch {
+    return plaidTransactionState(config, {
+      imported,
+      cached: true,
+      stale: true,
+      syncedOn: getPortalMeta("plaid_transaction_sync_date")
+    });
   }
 
-  return {
+  setPortalMeta("plaid_transaction_sync_date", today);
+  setPortalMeta("plaid_transaction_sync_time", new Date().toISOString());
+  return plaidTransactionState(config, {
     configured: true,
-    environment: config.environment,
-    linkedItems: listPlaidItems(),
     imported,
-    pending: listPlaidTransactions(),
-    skipped: listSkippedPlaidTransactions()
-  };
+    cached: false,
+    stale: false,
+    syncedOn: today
+  });
 }
 
 async function createPlaidLinkToken() {
@@ -1384,7 +1513,8 @@ function unskipPlaidTransaction(id) {
 }
 
 async function handleApi(request, response) {
-  const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+  const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+  const { pathname } = requestUrl;
 
   if (pathname === "/api/health") {
     sendJson(response, 200, {
@@ -1397,6 +1527,7 @@ async function handleApi(request, response) {
   }
 
   if (pathname === "/api/finance" && request.method === "GET") {
+    const plaidAccountCache = readPlaidAccountCache();
     sendJson(response, 200, {
       spending: listLedger("spending"),
       income: listLedger("income"),
@@ -1409,6 +1540,9 @@ async function handleApi(request, response) {
       plaidAccountTransactions: listPlaidAccountTransactions(),
       plaidSkippedTransactions: listSkippedPlaidTransactions(),
       plaidItems: listPlaidItems(),
+      plaidAccounts: plaidAccountCache?.payload.accounts || [],
+      plaidConnections: plaidAccountCache?.payload.connections || [],
+      plaidAccountsRefreshedOn: plaidAccountCache?.refreshedOn || "",
       plaidConfigured: getPlaidConfig().configured,
       workApplications: listWorkApplications(),
       workStatuses
@@ -1417,7 +1551,7 @@ async function handleApi(request, response) {
   }
 
   if (pathname === "/api/plaid/accounts" && request.method === "GET") {
-    sendJson(response, 200, await listPlaidAccounts());
+    sendJson(response, 200, await listPlaidAccounts({ force: requestUrl.searchParams.get("force") === "1" }));
     return true;
   }
 
@@ -1546,7 +1680,7 @@ async function handleApi(request, response) {
   }
 
   if (pathname === "/api/plaid/transactions/sync" && request.method === "POST") {
-    sendJson(response, 200, await syncPlaidTransactions());
+    sendJson(response, 200, await syncPlaidTransactions({ force: requestUrl.searchParams.get("force") === "1" }));
     return true;
   }
 
