@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createReadStream, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, isAbsolute, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,6 +48,7 @@ const port = Number(process.env.PORT || 3000);
 const configuredDataDir = process.env.LIFE_PORTAL_DATA_DIR || "data";
 const dataDir = isAbsolute(configuredDataDir) ? configuredDataDir : resolve(root, configuredDataDir);
 const dbPath = join(dataDir, "life-portal.sqlite");
+const profilePhotoPath = join(dataDir, "profile-photo.jpg");
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -570,6 +571,89 @@ function setPortalMeta(key, value) {
      VALUES (${sqlString(key)}, ${sqlString(value)})
      ON CONFLICT(key) DO UPDATE SET value = excluded.value;`
   );
+}
+
+const socialNetworks = ["linkedin", "tiktok", "twitter", "reddit", "instagram", "snapchat", "facebook"];
+
+function safeProfileUrl(value) {
+  const text = String(value || "").trim().slice(0, 500);
+  if (!text) return "";
+  try {
+    const url = new URL(text);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function cleanProfileList(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || "").trim().replace(/\s+/g, " ").slice(0, 160))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function defaultProfile() {
+  return {
+    name: "",
+    occupations: [],
+    degrees: [],
+    socials: Object.fromEntries(socialNetworks.map((network) => [network, { username: "", url: "" }])),
+    preferences: { defaultPage: "finance", reducedMotion: false },
+    hasPhoto: existsSync(profilePhotoPath),
+    updatedAt: ""
+  };
+}
+
+function readProfile() {
+  const fallback = defaultProfile();
+  try {
+    const saved = JSON.parse(getPortalMeta("life_profile") || "{}");
+    return {
+      ...fallback,
+      name: String(saved.name || "").trim().slice(0, 120),
+      occupations: cleanProfileList(saved.occupations),
+      degrees: cleanProfileList(saved.degrees),
+      socials: Object.fromEntries(socialNetworks.map((network) => [network, {
+        username: String(saved.socials?.[network]?.username || "").trim().slice(0, 100),
+        url: safeProfileUrl(saved.socials?.[network]?.url)
+      }])),
+      preferences: {
+        defaultPage: ["finance", "budget", "debt", "assets", "work", "class"].includes(saved.preferences?.defaultPage)
+          ? saved.preferences.defaultPage
+          : "finance",
+        reducedMotion: Boolean(saved.preferences?.reducedMotion)
+      },
+      hasPhoto: existsSync(profilePhotoPath),
+      updatedAt: String(saved.updatedAt || "")
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function updateProfile(body) {
+  const current = readProfile();
+  const next = {
+    name: String(body.name ?? current.name).trim().replace(/\s+/g, " ").slice(0, 120),
+    occupations: Object.hasOwn(body, "occupations") ? cleanProfileList(body.occupations) : current.occupations,
+    degrees: Object.hasOwn(body, "degrees") ? cleanProfileList(body.degrees) : current.degrees,
+    socials: Object.fromEntries(socialNetworks.map((network) => [network, {
+      username: String(body.socials?.[network]?.username ?? current.socials[network].username).trim().slice(0, 100),
+      url: safeProfileUrl(body.socials?.[network]?.url ?? current.socials[network].url)
+    }])),
+    preferences: {
+      defaultPage: ["finance", "budget", "debt", "assets", "work", "class"].includes(body.preferences?.defaultPage)
+        ? body.preferences.defaultPage
+        : current.preferences.defaultPage,
+      reducedMotion: Object.hasOwn(body.preferences || {}, "reducedMotion")
+        ? Boolean(body.preferences.reducedMotion)
+        : current.preferences.reducedMotion
+    },
+    updatedAt: new Date().toISOString()
+  };
+  setPortalMeta("life_profile", JSON.stringify(next));
+  return readProfile();
 }
 
 function localCalendarDate(date = new Date()) {
@@ -1481,12 +1565,12 @@ async function createPlaidLinkToken(purpose = "banking") {
     body: JSON.stringify({
       client_id: config.clientId,
       secret: config.secret,
-      client_name: "Life Portal",
+      client_name: "Lifepane",
       country_codes: ["US"],
       language: "en",
       products: purpose === "investments" ? ["investments"] : ["transactions"],
       user: {
-        client_user_id: process.env.PLAID_CLIENT_USER_ID || "life-portal-local-user"
+        client_user_id: process.env.PLAID_CLIENT_USER_ID || "lifepane-local-user"
       }
     })
   });
@@ -1662,6 +1746,50 @@ async function handleApi(request, response) {
       pid: process.pid,
       database: dbPath
     });
+    return true;
+  }
+
+  if (pathname === "/api/profile" && request.method === "GET") {
+    sendJson(response, 200, { profile: readProfile() });
+    return true;
+  }
+
+  if (pathname === "/api/profile" && request.method === "PATCH") {
+    sendJson(response, 200, { profile: updateProfile(await readBody(request)) });
+    return true;
+  }
+
+  if (pathname === "/api/profile/photo" && request.method === "GET") {
+    if (!existsSync(profilePhotoPath)) {
+      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Profile photo not found");
+      return true;
+    }
+    response.writeHead(200, {
+      "content-type": "image/jpeg",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    });
+    createReadStream(profilePhotoPath).pipe(response);
+    return true;
+  }
+
+  if (pathname === "/api/profile/photo" && request.method === "POST") {
+    const body = await readBody(request);
+    const match = String(body.image || "").match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) {
+      sendJson(response, 400, { error: "A cropped JPEG image is required." });
+      return true;
+    }
+    const image = Buffer.from(match[1], "base64");
+    if (!image.length || image.length > 750_000 || image[0] !== 0xff || image[1] !== 0xd8) {
+      sendJson(response, 400, { error: "The cropped photo is invalid or too large." });
+      return true;
+    }
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(profilePhotoPath, image, { mode: 0o600 });
+    const profile = updateProfile({});
+    sendJson(response, 200, { profile });
     return true;
   }
 
@@ -2250,7 +2378,7 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, "127.0.0.1", () => {
-  console.log(`Life Portal running at http://127.0.0.1:${port}`);
+  console.log(`Lifepane running at http://127.0.0.1:${port}`);
   console.log(`SQLite database: ${dbPath}`);
 });
 

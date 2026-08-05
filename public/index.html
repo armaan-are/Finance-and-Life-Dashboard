@@ -3,12 +3,22 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Life Portal</title>
+    <title>Lifepane</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/styles.css?v=20260805-investments-weekly-1">
+    <link rel="stylesheet" href="/styles.css?v=20260805-life-profile-1">
   </head>
   <body>
-    <nav class="tab-bar" aria-label="Life Portal sections">
+    <nav class="tab-bar" aria-label="Lifepane sections">
+      <button class="profile-launcher" type="button" data-open-profile aria-label="Open life profile">
+        <span class="profile-launcher-photo" data-profile-launcher-photo>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8" r="3.2"/>
+            <path d="M5.5 20c.6-4.1 2.8-6.2 6.5-6.2s5.9 2.1 6.5 6.2"/>
+          </svg>
+        </span>
+        <span>Profile</span>
+      </button>
+      <span class="tab-divider profile-divider" aria-hidden="true"></span>
       <a class="tab is-active" href="/" data-page-link="finance" aria-current="page">
         <span class="tab-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
@@ -67,7 +77,7 @@
         <span>Class</span>
       </a>
     </nav>
-    <main aria-label="Life Portal workspace">
+    <main aria-label="Lifepane workspace">
       <section class="finance-page page-view" data-page="finance" aria-labelledby="finance-title">
         <div class="finance-head">
           <h1 id="finance-title">Finance</h1>
@@ -329,9 +339,35 @@
               </div>
               <button class="add-button assets-link-investment" type="button" data-link-investment>Link investment</button>
             </div>
-            <div class="assets-portfolio-summary">
-              <strong data-assets-investment-total>$0.00</strong>
-              <span data-assets-investment-count>No positions</span>
+            <div class="assets-portfolio-summary" aria-label="Investment portfolio summary">
+              <div class="assets-portfolio-summary-primary">
+                <span>Market value</span>
+                <strong data-assets-investment-total>$0.00</strong>
+                <small data-assets-investment-count>No positions</small>
+              </div>
+              <div class="assets-portfolio-summary-metric">
+                <span>Cost basis</span>
+                <strong data-assets-investment-cost>—</strong>
+              </div>
+              <div class="assets-portfolio-summary-metric">
+                <span>Total return</span>
+                <strong data-assets-investment-return>—</strong>
+                <small data-assets-investment-return-rate></small>
+              </div>
+            </div>
+            <div class="assets-portfolio-visuals" data-assets-portfolio-visuals hidden>
+              <section class="assets-portfolio-visual" aria-labelledby="portfolio-allocation-title">
+                <h3 id="portfolio-allocation-title">Allocation</h3>
+                <div class="assets-portfolio-allocation" data-assets-portfolio-allocation></div>
+              </section>
+              <section class="assets-portfolio-visual" aria-labelledby="portfolio-values-title">
+                <h3 id="portfolio-values-title">Position values</h3>
+                <div class="assets-portfolio-values" data-assets-portfolio-values></div>
+              </section>
+            </div>
+            <div class="assets-portfolio-list-head" data-assets-portfolio-list-head hidden>
+              <strong>Holdings</strong>
+              <span>Value · shares · price</span>
             </div>
             <div class="assets-portfolio-list" data-assets-portfolio-list></div>
           </article>
@@ -829,6 +865,138 @@
         <button class="add-button save-budget" type="submit" data-save-category>Create Category</button>
       </form>
     </dialog>
+    <dialog class="profile-dialog" data-profile-dialog>
+      <div class="profile-dialog-head">
+        <div>
+          <span class="profile-eyebrow">Life profile</span>
+          <h2>Your life, in one place</h2>
+        </div>
+        <button class="delete-row" type="button" data-close-profile aria-label="Close profile">x</button>
+      </div>
+      <div class="profile-tabs" role="tablist" aria-label="Profile sections">
+        <button class="profile-tab is-active" type="button" role="tab" aria-selected="true" data-profile-tab="overview">Overview</button>
+        <button class="profile-tab" type="button" role="tab" aria-selected="false" data-profile-tab="settings">Settings</button>
+      </div>
+      <section class="profile-panel" data-profile-panel="overview">
+        <div class="profile-identity">
+          <button class="profile-photo-button" type="button" data-change-profile-photo aria-label="Change profile photo">
+            <span class="profile-photo" data-profile-photo>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="8" r="3.2"/>
+                <path d="M5.5 20c.6-4.1 2.8-6.2 6.5-6.2s5.9 2.1 6.5 6.2"/>
+              </svg>
+            </span>
+            <span class="profile-photo-edit" aria-hidden="true">Edit</span>
+          </button>
+          <div class="profile-identity-copy">
+            <h3 data-profile-display-name>Your name</h3>
+            <p data-profile-display-headline>Add your current occupation</p>
+          </div>
+          <button class="add-button" type="button" data-edit-profile>Edit profile</button>
+        </div>
+        <div class="profile-view" data-profile-view>
+          <div class="profile-life-grid">
+            <section>
+              <span class="profile-section-label">Current occupation</span>
+              <div class="profile-fact-list" data-profile-occupations></div>
+            </section>
+            <section>
+              <span class="profile-section-label">School &amp; degrees</span>
+              <div class="profile-fact-list" data-profile-degrees></div>
+            </section>
+          </div>
+          <section class="profile-social-section">
+            <span class="profile-section-label">Social profiles</span>
+            <div class="profile-social-list" data-profile-social-list></div>
+          </section>
+        </div>
+        <form class="profile-edit-form" data-profile-form hidden>
+          <label class="profile-field profile-name-field">
+            <span>Name</span>
+            <input class="ledger-input" name="name" type="text" maxlength="120" autocomplete="name" placeholder="Your name">
+          </label>
+          <div class="profile-form-grid">
+            <label class="profile-field">
+              <span>Current occupation(s)</span>
+              <textarea class="ledger-input" name="occupations" rows="4" placeholder="One occupation per line"></textarea>
+            </label>
+            <label class="profile-field">
+              <span>School &amp; degrees</span>
+              <textarea class="ledger-input" name="degrees" rows="4" placeholder="One school or degree per line"></textarea>
+            </label>
+          </div>
+          <div class="profile-social-editor" data-profile-social-editor></div>
+          <p class="profile-form-status" data-profile-status></p>
+          <div class="profile-form-actions">
+            <button class="add-button" type="button" data-cancel-profile-edit>Cancel</button>
+            <button class="add-button save-budget" type="submit">Save profile</button>
+          </div>
+        </form>
+      </section>
+      <section class="profile-panel" data-profile-panel="settings" hidden>
+        <div class="profile-settings-list">
+          <div class="profile-setting-row">
+            <div>
+              <strong>Plaid Manager</strong>
+              <span>Connected banks, balances, investments, and imports</span>
+            </div>
+            <button class="add-button" type="button" data-profile-open-plaid-manager>Open</button>
+          </div>
+          <label class="profile-setting-row">
+            <div>
+              <strong>Default section</strong>
+              <span>Where Lifepane opens when there is no saved link</span>
+            </div>
+            <select class="ledger-select profile-setting-control" data-profile-default-page>
+              <option value="finance">Finance</option>
+              <option value="budget">Budget</option>
+              <option value="debt">Debt</option>
+              <option value="assets">Assets &amp; Spending</option>
+              <option value="work">Work</option>
+              <option value="class">Class</option>
+            </select>
+          </label>
+          <label class="profile-setting-row">
+            <div>
+              <strong>Reduce motion</strong>
+              <span>Minimize interface movement and transitions</span>
+            </div>
+            <input class="profile-switch" type="checkbox" data-profile-reduced-motion>
+          </label>
+          <div class="profile-setting-row profile-setting-future">
+            <div>
+              <strong>Lifepane settings</strong>
+              <span>This space will grow with privacy, integrations, notifications, and more.</span>
+            </div>
+          </div>
+        </div>
+        <p class="profile-form-status" data-profile-settings-status></p>
+      </section>
+    </dialog>
+    <input type="file" accept="image/jpeg,image/png,image/webp" data-profile-photo-input hidden>
+    <dialog class="profile-crop-dialog" data-profile-crop-dialog>
+      <div class="profile-dialog-head">
+        <div>
+          <span class="profile-eyebrow">Profile photo</span>
+          <h2>Crop your photo</h2>
+        </div>
+        <button class="delete-row" type="button" data-close-profile-crop aria-label="Close photo cropper">x</button>
+      </div>
+      <p class="profile-crop-help">Drag the photo to reposition it, then use zoom to frame your crop.</p>
+      <div class="profile-crop-stage" data-profile-crop-stage>
+        <img alt="Profile crop preview" data-profile-crop-image draggable="false">
+        <span class="profile-crop-ring" aria-hidden="true"></span>
+      </div>
+      <label class="profile-zoom-field">
+        <span>Zoom</span>
+        <input type="range" min="1" max="3" step="0.01" value="1" data-profile-crop-zoom>
+      </label>
+      <p class="profile-form-status" data-profile-crop-status></p>
+      <div class="profile-form-actions">
+        <button class="add-button" type="button" data-choose-profile-photo>Choose another</button>
+        <button class="add-button save-budget" type="button" data-save-profile-photo>Save photo</button>
+      </div>
+    </dialog>
     <dialog class="budget-dialog plaid-manager-dialog" data-plaid-manager-dialog>
       <div class="budget-dialog-head">
         <div>
@@ -893,6 +1061,6 @@
     </dialog>
     <script src="/vendor/d3/d3.min.js"></script>
     <script src="/vendor/d3-sankey/d3-sankey.min.js"></script>
-    <script src="/app.js?v=20260805-investments-weekly-1"></script>
+    <script src="/app.js?v=20260805-life-profile-1"></script>
   </body>
 </html>

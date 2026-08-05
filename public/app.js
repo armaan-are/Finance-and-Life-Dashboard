@@ -41,6 +41,21 @@ const ledgerLists = {
 };
 const pageViews = document.querySelectorAll("[data-page]");
 const pageLinks = document.querySelectorAll("[data-page-link]");
+const profileDialog = document.querySelector("[data-profile-dialog]");
+const profileForm = document.querySelector("[data-profile-form]");
+const profileView = document.querySelector("[data-profile-view]");
+const profileStatus = document.querySelector("[data-profile-status]");
+const profileSettingsStatus = document.querySelector("[data-profile-settings-status]");
+const profileSocialEditor = document.querySelector("[data-profile-social-editor]");
+const profileSocialList = document.querySelector("[data-profile-social-list]");
+const profilePhotoInput = document.querySelector("[data-profile-photo-input]");
+const profileCropDialog = document.querySelector("[data-profile-crop-dialog]");
+const profileCropStage = document.querySelector("[data-profile-crop-stage]");
+const profileCropImage = document.querySelector("[data-profile-crop-image]");
+const profileCropZoom = document.querySelector("[data-profile-crop-zoom]");
+const profileCropStatus = document.querySelector("[data-profile-crop-status]");
+const profileDefaultPage = document.querySelector("[data-profile-default-page]");
+const profileReducedMotion = document.querySelector("[data-profile-reduced-motion]");
 const budgetDialog = document.querySelector("[data-budget-dialog]");
 const budgetForm = document.querySelector("[data-budget-form]");
 const budgetCategories = document.querySelector("[data-budget-categories]");
@@ -112,7 +127,14 @@ const assetsCategoryTrends = document.querySelector("[data-assets-category-trend
 const assetsInsights = document.querySelector("[data-assets-insights]");
 const assetsInvestmentTotal = document.querySelector("[data-assets-investment-total]");
 const assetsInvestmentCount = document.querySelector("[data-assets-investment-count]");
+const assetsInvestmentCost = document.querySelector("[data-assets-investment-cost]");
+const assetsInvestmentReturn = document.querySelector("[data-assets-investment-return]");
+const assetsInvestmentReturnRate = document.querySelector("[data-assets-investment-return-rate]");
 const assetsInvestmentStatus = document.querySelector("[data-assets-investment-status]");
+const assetsPortfolioVisuals = document.querySelector("[data-assets-portfolio-visuals]");
+const assetsPortfolioAllocation = document.querySelector("[data-assets-portfolio-allocation]");
+const assetsPortfolioValues = document.querySelector("[data-assets-portfolio-values]");
+const assetsPortfolioListHead = document.querySelector("[data-assets-portfolio-list-head]");
 const assetsPortfolioList = document.querySelector("[data-assets-portfolio-list]");
 const linkInvestmentButton = document.querySelector("[data-link-investment]");
 const assetsRangeButtons = document.querySelectorAll("[data-assets-range]");
@@ -204,6 +226,20 @@ const workSummaryElements = {
   responseRate: document.querySelector("[data-work-response-rate]")
 };
 let financeData = { spending: [], income: [], budgets: [], loans: [], graduationDate: "", plaidAccounts: [], plaidAccountTransactions: [], plaidInvestments: { accounts: [], holdings: [], securities: [] }, workApplications: [], workStatuses: defaultWorkStatuses };
+const profileSocialNetworks = ["linkedin", "tiktok", "twitter", "reddit", "instagram", "snapchat", "facebook"];
+const emptyLifeProfile = {
+  name: "",
+  occupations: [],
+  degrees: [],
+  socials: Object.fromEntries(profileSocialNetworks.map((network) => [network, { username: "", url: "" }])),
+  preferences: { defaultPage: "finance", reducedMotion: false },
+  hasPhoto: false,
+  updatedAt: ""
+};
+let lifeProfile = structuredClone(emptyLifeProfile);
+let profileEditing = false;
+let profileCropObjectUrl = "";
+let profileCropState = null;
 let editingBudgetId = null;
 let deletingBudgetId = null;
 let editingBuilderBucketId = null;
@@ -254,6 +290,243 @@ async function api(path, options = {}) {
   }
 
   return response.json();
+}
+
+function profileIcon(network) {
+  const icons = {
+    linkedin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8.2h3.2V19H5zm1.6-5A1.9 1.9 0 1 1 6.6 7a1.9 1.9 0 0 1 0-3.8ZM10.4 8.2h3.1v1.5h.1c.5-.9 1.7-1.9 3.5-1.9 3.4 0 4 2.2 4 5.2v6h-3.2v-5.3c0-1.3 0-3-1.8-3s-2.4 1.4-2.4 2.9V19h-3.3Z"/></svg>',
+    tiktok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.3 3h3a5 5 0 0 0 3.7 3.7v3a8.3 8.3 0 0 1-3.7-1v5.8A6.5 6.5 0 1 1 11.7 8v3.2a3.3 3.3 0 1 0 2.6 3.3Z"/></svg>',
+    twitter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h4.2l4.7 6.3L18.3 3H21l-6.9 8.3L21.8 21h-4.2l-5.4-7-5.9 7H3.5l7.4-9Z"/></svg>',
+    reddit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 12.2c.2-.4.4-.8.4-1.3a2.4 2.4 0 0 0-4.1-1.7 11 11 0 0 0-4.1-1.3l.8-3.7 2.7.6a1.8 1.8 0 1 0 .3-1.4l-3.5-.8a.8.8 0 0 0-.9.6l-1 4.7A11.5 11.5 0 0 0 7 9.2a2.4 2.4 0 0 0-4 1.7c0 .5.1.9.4 1.3A4 4 0 0 0 3 14c0 3.4 4 6.1 9 6.1s9-2.7 9-6.1c0-.6-.1-1.2-.4-1.8ZM8.3 13a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Zm7.1 4.2c-.9.9-2.1 1.3-3.4 1.3s-2.5-.4-3.4-1.3a.7.7 0 0 1 1-1c.6.6 1.5.9 2.4.9s1.8-.3 2.4-.9a.7.7 0 1 1 1 1Zm.3-1.4a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8Z"/></svg>',
+    instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M7.3 2h9.4A5.3 5.3 0 0 1 22 7.3v9.4a5.3 5.3 0 0 1-5.3 5.3H7.3A5.3 5.3 0 0 1 2 16.7V7.3A5.3 5.3 0 0 1 7.3 2Zm0 2A3.3 3.3 0 0 0 4 7.3v9.4A3.3 3.3 0 0 0 7.3 20h9.4a3.3 3.3 0 0 0 3.3-3.3V7.3A3.3 3.3 0 0 0 16.7 4Zm10.2 1.5a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>',
+    snapchat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c3.2 0 5 2.5 5 5.5 0 1-.2 2-.1 2.8.3.8 1.4 1 2.2 1.4.8.4.7 1.2-.1 1.6-.5.3-1.1.4-1.5.7-.4.4-.3 1.1-.8 1.6-.5.4-1.2.4-1.8.7-.7.3-.8 1.2-1.6 1.4-.4.1-.9-.2-1.3-.2s-.9.3-1.3.2c-.8-.2-.9-1.1-1.6-1.4-.6-.3-1.3-.3-1.8-.7-.5-.5-.4-1.2-.8-1.6-.4-.3-1-.4-1.5-.7-.8-.4-.9-1.2-.1-1.6.8-.4 1.9-.6 2.2-1.4.1-.8-.1-1.8-.1-2.8 0-3 1.8-5.5 5-5.5Z"/></svg>',
+    facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.2 22v-9h3l.5-3.5h-3.5V7.3c0-1 .3-1.8 1.8-1.8h1.9V2.4c-.3 0-1.5-.1-2.8-.1-2.8 0-4.7 1.7-4.7 4.8v2.6H7.2V13h3.2v9Z"/></svg>'
+  };
+  const element = document.createElement("span");
+  element.className = "profile-social-icon";
+  element.innerHTML = icons[network] || "";
+  return element;
+}
+
+function profileFallbackIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c.6-4.1 2.8-6.2 6.5-6.2s5.9 2.1 6.5 6.2"/>';
+  return svg;
+}
+
+function defaultSocialUrl(network, username) {
+  const handle = String(username || "").trim().replace(/^@/, "");
+  if (!handle) return "";
+  const encoded = encodeURIComponent(handle);
+  const bases = {
+    linkedin: "https://www.linkedin.com/in/",
+    tiktok: "https://www.tiktok.com/@",
+    twitter: "https://x.com/",
+    reddit: "https://www.reddit.com/user/",
+    instagram: "https://www.instagram.com/",
+    snapchat: "https://www.snapchat.com/add/",
+    facebook: "https://www.facebook.com/"
+  };
+  return `${bases[network]}${encoded}`;
+}
+
+function renderProfilePhotoTarget(target) {
+  target.replaceChildren();
+  if (lifeProfile.hasPhoto) {
+    const image = document.createElement("img");
+    image.src = `/api/profile/photo?v=${encodeURIComponent(lifeProfile.updatedAt || Date.now())}`;
+    image.alt = lifeProfile.name ? `${lifeProfile.name} profile photo` : "Profile photo";
+    target.append(image);
+  } else {
+    target.append(profileFallbackIcon());
+  }
+}
+
+function renderProfileFacts(target, values, emptyText) {
+  target.replaceChildren();
+  if (!values.length) {
+    const empty = document.createElement("span");
+    empty.className = "profile-empty";
+    empty.textContent = emptyText;
+    target.append(empty);
+    return;
+  }
+  target.append(...values.map((value) => {
+    const row = document.createElement("div");
+    row.className = "profile-fact";
+    row.textContent = value;
+    return row;
+  }));
+}
+
+function renderProfileSocials() {
+  profileSocialList.replaceChildren();
+  const active = profileSocialNetworks.filter((network) => lifeProfile.socials?.[network]?.username);
+  if (!active.length) {
+    const empty = document.createElement("div");
+    empty.className = "profile-social-empty profile-empty";
+    empty.textContent = "Add your social accounts to keep your online life connected.";
+    profileSocialList.append(empty);
+    return;
+  }
+  profileSocialList.append(...active.map((network) => {
+    const social = lifeProfile.socials[network];
+    const link = document.createElement("a");
+    link.className = "profile-social-link";
+    link.href = social.url || defaultSocialUrl(network, social.username);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.append(profileIcon(network));
+    const copy = document.createElement("span");
+    copy.className = "profile-social-copy";
+    const label = document.createElement("span");
+    label.textContent = network === "twitter" ? "X / Twitter" : network;
+    const username = document.createElement("strong");
+    username.textContent = social.username;
+    copy.append(label, username);
+    link.append(copy);
+    return link;
+  }));
+}
+
+function renderLifeProfile() {
+  document.querySelector("[data-profile-display-name]").textContent = lifeProfile.name || "Your name";
+  document.querySelector("[data-profile-display-headline]").textContent = lifeProfile.occupations[0] || "Add your current occupation";
+  renderProfileFacts(document.querySelector("[data-profile-occupations]"), lifeProfile.occupations, "Add a job, role, or current focus.");
+  renderProfileFacts(document.querySelector("[data-profile-degrees]"), lifeProfile.degrees, "Add your school and degrees.");
+  renderProfileSocials();
+  renderProfilePhotoTarget(document.querySelector("[data-profile-photo]"));
+  renderProfilePhotoTarget(document.querySelector("[data-profile-launcher-photo]"));
+  profileDefaultPage.value = lifeProfile.preferences.defaultPage;
+  profileReducedMotion.checked = lifeProfile.preferences.reducedMotion;
+  document.documentElement.classList.toggle("reduced-motion", lifeProfile.preferences.reducedMotion);
+}
+
+function createProfileSocialEditor() {
+  const head = document.createElement("div");
+  head.className = "profile-social-editor-head";
+  head.innerHTML = "<span>Social account</span><span>Username</span><span>Profile URL (optional)</span>";
+  const rows = profileSocialNetworks.map((network) => {
+    const row = document.createElement("label");
+    row.className = "profile-social-editor-row";
+    const name = document.createElement("span");
+    name.append(profileIcon(network), network === "twitter" ? "X / Twitter" : network);
+    const username = document.createElement("input");
+    username.className = "ledger-input";
+    username.name = `${network}Username`;
+    username.placeholder = "@username";
+    username.maxLength = 100;
+    const url = document.createElement("input");
+    url.className = "ledger-input";
+    url.type = "url";
+    url.name = `${network}Url`;
+    url.placeholder = "https://…";
+    url.maxLength = 500;
+    row.append(name, username, url);
+    return row;
+  });
+  profileSocialEditor.replaceChildren(head, ...rows);
+}
+
+function setProfileEditMode(editing) {
+  profileEditing = editing;
+  profileView.hidden = editing;
+  profileForm.hidden = !editing;
+  document.querySelector("[data-edit-profile]").hidden = editing;
+  profileStatus.textContent = "";
+  profileStatus.classList.remove("is-error");
+  if (!editing) return;
+  profileForm.elements.name.value = lifeProfile.name;
+  profileForm.elements.occupations.value = lifeProfile.occupations.join("\n");
+  profileForm.elements.degrees.value = lifeProfile.degrees.join("\n");
+  for (const network of profileSocialNetworks) {
+    profileForm.elements[`${network}Username`].value = lifeProfile.socials[network]?.username || "";
+    profileForm.elements[`${network}Url`].value = lifeProfile.socials[network]?.url || "";
+  }
+  profileForm.elements.name.focus();
+}
+
+function profileLines(value) {
+  return String(value || "").split(/\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+async function loadLifeProfile() {
+  const result = await api("/api/profile");
+  lifeProfile = { ...structuredClone(emptyLifeProfile), ...result.profile };
+  lifeProfile.socials = { ...structuredClone(emptyLifeProfile.socials), ...(result.profile?.socials || {}) };
+  lifeProfile.preferences = { ...emptyLifeProfile.preferences, ...(result.profile?.preferences || {}) };
+  renderLifeProfile();
+  return lifeProfile;
+}
+
+async function saveProfilePreferences() {
+  profileSettingsStatus.textContent = "Saving…";
+  try {
+    const result = await api("/api/profile", {
+      method: "PATCH",
+      body: JSON.stringify({ preferences: { defaultPage: profileDefaultPage.value, reducedMotion: profileReducedMotion.checked } })
+    });
+    lifeProfile = { ...lifeProfile, ...result.profile };
+    renderLifeProfile();
+    profileSettingsStatus.textContent = "Settings saved";
+  } catch {
+    profileSettingsStatus.textContent = "Settings could not be saved";
+    profileSettingsStatus.classList.add("is-error");
+  }
+}
+
+function constrainProfileCrop() {
+  if (!profileCropState) return;
+  const stageSize = profileCropStage.clientWidth;
+  const scale = profileCropState.baseScale * profileCropState.zoom;
+  const width = profileCropImage.naturalWidth * scale;
+  const height = profileCropImage.naturalHeight * scale;
+  profileCropState.x = Math.min(0, Math.max(stageSize - width, profileCropState.x));
+  profileCropState.y = Math.min(0, Math.max(stageSize - height, profileCropState.y));
+}
+
+function renderProfileCrop() {
+  if (!profileCropState) return;
+  constrainProfileCrop();
+  const scale = profileCropState.baseScale * profileCropState.zoom;
+  profileCropImage.style.width = `${profileCropImage.naturalWidth * scale}px`;
+  profileCropImage.style.height = `${profileCropImage.naturalHeight * scale}px`;
+  profileCropImage.style.left = `${profileCropState.x}px`;
+  profileCropImage.style.top = `${profileCropState.y}px`;
+}
+
+function initializeProfileCrop() {
+  const stageSize = profileCropStage.clientWidth;
+  const baseScale = Math.max(stageSize / profileCropImage.naturalWidth, stageSize / profileCropImage.naturalHeight);
+  const width = profileCropImage.naturalWidth * baseScale;
+  const height = profileCropImage.naturalHeight * baseScale;
+  profileCropState = { baseScale, zoom: 1, x: (stageSize - width) / 2, y: (stageSize - height) / 2 };
+  profileCropZoom.value = "1";
+  renderProfileCrop();
+}
+
+function openProfilePhotoFile(file) {
+  if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    profileStatus.textContent = "Choose a JPEG, PNG, or WebP image.";
+    profileStatus.classList.add("is-error");
+    return;
+  }
+  if (file.size > 15_000_000) {
+    profileStatus.textContent = "Choose an image smaller than 15 MB.";
+    profileStatus.classList.add("is-error");
+    return;
+  }
+  if (profileCropObjectUrl) URL.revokeObjectURL(profileCropObjectUrl);
+  profileCropObjectUrl = URL.createObjectURL(file);
+  profileCropImage.onload = () => {
+    profileCropDialog.showModal();
+    requestAnimationFrame(initializeProfileCrop);
+  };
+  profileCropImage.src = profileCropObjectUrl;
+  profileCropStatus.textContent = "";
+  profilePhotoInput.value = "";
 }
 
 function cell(ledger, row, field, value) {
@@ -1106,24 +1379,123 @@ function renderWeeklySpendingChart(weekly) {
 function investmentPortfolioModel() {
   const investments = financeData.plaidInvestments || {};
   const securityById = new Map((investments.securities || []).map((security) => [security.securityId, security]));
+  const accountById = new Map((investments.accounts || []).map((account) => [account.accountId, account]));
   const positions = (investments.holdings || []).map((holding) => {
     const security = securityById.get(holding.securityId) || {};
+    const account = accountById.get(holding.accountId) || {};
     const value = numberValue(holding.institutionValue ?? (numberValue(holding.quantity) * numberValue(holding.institutionPrice)));
     return {
       name: security.name || "Security",
       ticker: security.tickerSymbol || "",
       type: security.type || "Investment",
+      accountName: account.name || "Investment account",
       quantity: numberValue(holding.quantity),
       price: holding.institutionPrice === null ? null : numberValue(holding.institutionPrice),
+      costBasis: holding.costBasis === null || holding.costBasis === undefined ? null : numberValue(holding.costBasis),
       value
     };
   }).filter((position) => position.value || position.quantity).sort((a, b) => b.value - a.value);
   const accountTotal = (investments.accounts || []).reduce((total, account) => total + assetAccountBalance(account), 0);
+  const positionsWithCost = positions.filter((position) => position.costBasis !== null);
+  const costBasis = d3.sum(positionsWithCost, (position) => position.costBasis);
+  const costBasisValue = d3.sum(positionsWithCost, (position) => position.value);
   return {
     positions,
     accounts: investments.accounts || [],
-    total: accountTotal || d3.sum(positions, (position) => position.value)
+    total: accountTotal || d3.sum(positions, (position) => position.value),
+    costBasis: positionsWithCost.length ? costBasis : null,
+    returnValue: positionsWithCost.length ? costBasisValue - costBasis : null,
+    returnRate: positionsWithCost.length && costBasis > 0 ? (costBasisValue - costBasis) / costBasis : null
   };
+}
+
+const portfolioChartColors = ["#9ffcdf", "#7cc7ff", "#d7b3ff", "#ffb86b", "#ef8f8f", "#a9b3bd"];
+
+function portfolioAllocationRows(positions) {
+  const visible = positions.filter((position) => position.value > 0);
+  if (visible.length <= 5) return visible.map((position) => ({ ...position }));
+  return [
+    ...visible.slice(0, 4).map((position) => ({ ...position })),
+    {
+      ticker: "Other",
+      name: "Other positions",
+      value: d3.sum(visible.slice(4), (position) => position.value)
+    }
+  ];
+}
+
+function renderPortfolioAllocation(portfolio) {
+  assetsPortfolioAllocation.replaceChildren();
+  const rows = portfolioAllocationRows(portfolio.positions);
+  if (!rows.length) return;
+  const total = d3.sum(rows, (row) => row.value);
+  const size = 154;
+  const radius = 68;
+  const pie = d3.pie().sort(null).value((row) => row.value)(rows);
+  const arc = d3.arc().innerRadius(43).outerRadius(radius);
+  const svg = d3.create("svg")
+    .attr("viewBox", `0 0 ${size} ${size}`)
+    .attr("role", "img")
+    .attr("aria-label", "Portfolio allocation by holding");
+  const graph = svg.append("g").attr("transform", `translate(${size / 2},${size / 2})`);
+  graph.selectAll("path").data(pie).join("path")
+    .attr("d", arc)
+    .attr("fill", (_, index) => portfolioChartColors[index % portfolioChartColors.length])
+    .attr("stroke", "#0c1116")
+    .attr("stroke-width", 2)
+    .append("title")
+    .text((slice) => `${slice.data.ticker || slice.data.name}: ${money(slice.data.value)} (${(slice.data.value / total * 100).toFixed(1)}%)`);
+  graph.append("text").attr("class", "assets-portfolio-donut-label").attr("text-anchor", "middle").attr("y", -2).text("Invested");
+  graph.append("text").attr("class", "assets-portfolio-donut-value").attr("text-anchor", "middle").attr("y", 15).text(money(total));
+
+  const legend = document.createElement("div");
+  legend.className = "assets-portfolio-allocation-legend";
+  rows.forEach((row, index) => {
+    const item = document.createElement("div");
+    const label = document.createElement("span");
+    label.style.setProperty("--portfolio-color", portfolioChartColors[index % portfolioChartColors.length]);
+    label.textContent = row.ticker || row.name;
+    const percentage = document.createElement("strong");
+    percentage.textContent = `${(row.value / total * 100).toFixed(1)}%`;
+    item.append(label, percentage);
+    legend.append(item);
+  });
+  assetsPortfolioAllocation.append(svg.node(), legend);
+}
+
+function renderPortfolioPositionValues(portfolio) {
+  assetsPortfolioValues.replaceChildren();
+  const rows = portfolio.positions.filter((position) => position.value > 0).slice(0, 6);
+  if (!rows.length) return;
+  const width = Math.max(assetsPortfolioValues.clientWidth || 280, 260);
+  const height = Math.max(154, rows.length * 25 + 25);
+  const margin = { top: 5, right: 48, bottom: 23, left: 48 };
+  const maxValue = d3.max(rows, (row) => row.value) || 1;
+  const x = d3.scaleLinear().domain([0, maxValue * 1.18]).range([margin.left, width - margin.right]);
+  const y = d3.scaleBand().domain(rows.map((row) => row.ticker || row.name)).range([margin.top, height - margin.bottom]).padding(0.3);
+  const svg = d3.select(assetsPortfolioValues).append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("role", "img")
+    .attr("aria-label", "Market value by portfolio position");
+  svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`)
+    .call(d3.axisBottom(x).ticks(3).tickFormat(assetMoneyTick).tickSizeOuter(0));
+  svg.append("g").attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).tickSize(0))
+    .call((group) => group.select(".domain").remove());
+  svg.selectAll(".assets-position-bar").data(rows).join("rect")
+    .attr("class", "assets-position-bar")
+    .attr("x", margin.left)
+    .attr("y", (row) => y(row.ticker || row.name))
+    .attr("width", (row) => Math.max(2, x(row.value) - margin.left))
+    .attr("height", y.bandwidth())
+    .attr("fill", (_, index) => portfolioChartColors[index % portfolioChartColors.length])
+    .append("title")
+    .text((row) => `${row.ticker || row.name}: ${money(row.value)}`);
+  svg.selectAll(".assets-position-value").data(rows).join("text")
+    .attr("class", "assets-position-value")
+    .attr("x", (row) => x(row.value) + 5)
+    .attr("y", (row) => (y(row.ticker || row.name) || 0) + y.bandwidth() / 2 + 4)
+    .text((row) => money(row.value));
 }
 
 function renderInvestmentPortfolio() {
@@ -1133,9 +1505,22 @@ function renderInvestmentPortfolio() {
   assetsInvestmentCount.textContent = portfolio.positions.length
     ? `${portfolio.positions.length} position${portfolio.positions.length === 1 ? "" : "s"} across ${accountCount} account${accountCount === 1 ? "" : "s"}`
     : "No positions";
+  assetsInvestmentCost.textContent = portfolio.costBasis === null ? "—" : money(portfolio.costBasis);
+  assetsInvestmentReturn.textContent = portfolio.returnValue === null
+    ? "—"
+    : `${portfolio.returnValue >= 0 ? "+" : ""}${money(portfolio.returnValue)}`;
+  assetsInvestmentReturn.classList.toggle("is-positive", portfolio.returnValue > 0);
+  assetsInvestmentReturn.classList.toggle("is-negative", portfolio.returnValue < 0);
+  assetsInvestmentReturnRate.textContent = portfolio.returnRate === null
+    ? ""
+    : `${portfolio.returnRate >= 0 ? "+" : ""}${(portfolio.returnRate * 100).toFixed(2)}% on covered positions`;
   assetsInvestmentStatus.textContent = financeData.plaidInvestmentsRefreshedOn
     ? `Plaid holdings · updated ${financeData.plaidInvestmentsRefreshedOn}`
     : "Connect a brokerage through Plaid";
+  assetsPortfolioVisuals.hidden = !portfolio.positions.length;
+  assetsPortfolioListHead.hidden = !portfolio.positions.length;
+  renderPortfolioAllocation(portfolio);
+  renderPortfolioPositionValues(portfolio);
   assetsPortfolioList.replaceChildren(
     ...portfolio.positions.slice(0, 8).map((position) => {
       const row = document.createElement("div");
@@ -1144,7 +1529,7 @@ function renderInvestmentPortfolio() {
       const name = document.createElement("strong");
       name.textContent = position.ticker || position.name;
       const detail = document.createElement("span");
-      detail.textContent = position.ticker ? position.name : position.type;
+      detail.textContent = `${position.ticker ? position.name : position.type} · ${position.accountName}`;
       identity.append(name, detail);
       const value = document.createElement("div");
       const amount = document.createElement("strong");
@@ -5402,6 +5787,143 @@ document.querySelector("[data-skip-plaid]").addEventListener("click", async () =
   await refreshPlaidState(result);
 });
 
+function selectProfileTab(tabName) {
+  for (const tab of document.querySelectorAll("[data-profile-tab]")) {
+    const active = tab.dataset.profileTab === tabName;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+  }
+  for (const panel of document.querySelectorAll("[data-profile-panel]")) {
+    panel.hidden = panel.dataset.profilePanel !== tabName;
+  }
+}
+
+document.querySelector("[data-open-profile]").addEventListener("click", async () => {
+  selectProfileTab("overview");
+  setProfileEditMode(false);
+  profileDialog.showModal();
+  try {
+    await loadLifeProfile();
+  } catch {
+    profileStatus.textContent = "Your profile could not be loaded.";
+    profileStatus.classList.add("is-error");
+  }
+});
+
+document.querySelector("[data-close-profile]").addEventListener("click", () => profileDialog.close());
+for (const tab of document.querySelectorAll("[data-profile-tab]")) {
+  tab.addEventListener("click", () => selectProfileTab(tab.dataset.profileTab));
+}
+document.querySelector("[data-edit-profile]").addEventListener("click", () => setProfileEditMode(true));
+document.querySelector("[data-cancel-profile-edit]").addEventListener("click", () => setProfileEditMode(false));
+
+profileForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  profileStatus.textContent = "Saving…";
+  profileStatus.classList.remove("is-error");
+  const socials = Object.fromEntries(profileSocialNetworks.map((network) => [network, {
+    username: profileForm.elements[`${network}Username`].value,
+    url: profileForm.elements[`${network}Url`].value
+  }]));
+  try {
+    const result = await api("/api/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: profileForm.elements.name.value,
+        occupations: profileLines(profileForm.elements.occupations.value),
+        degrees: profileLines(profileForm.elements.degrees.value),
+        socials
+      })
+    });
+    lifeProfile = { ...lifeProfile, ...result.profile };
+    renderLifeProfile();
+    setProfileEditMode(false);
+  } catch {
+    profileStatus.textContent = "Your profile could not be saved. Check any profile URLs and try again.";
+    profileStatus.classList.add("is-error");
+  }
+});
+
+profileDefaultPage.addEventListener("change", saveProfilePreferences);
+profileReducedMotion.addEventListener("change", saveProfilePreferences);
+document.querySelector("[data-profile-open-plaid-manager]").addEventListener("click", () => {
+  profileDialog.close();
+  renderPlaidManager();
+  plaidManagerDialog.showModal();
+  refreshPlaidAccounts();
+});
+
+for (const button of document.querySelectorAll("[data-change-profile-photo], [data-choose-profile-photo]")) {
+  button.addEventListener("click", () => profilePhotoInput.click());
+}
+profilePhotoInput.addEventListener("change", () => openProfilePhotoFile(profilePhotoInput.files?.[0]));
+document.querySelector("[data-close-profile-crop]").addEventListener("click", () => profileCropDialog.close());
+
+profileCropStage.addEventListener("pointerdown", (event) => {
+  if (!profileCropState) return;
+  profileCropStage.setPointerCapture(event.pointerId);
+  profileCropState.pointerX = event.clientX;
+  profileCropState.pointerY = event.clientY;
+  profileCropState.startX = profileCropState.x;
+  profileCropState.startY = profileCropState.y;
+});
+profileCropStage.addEventListener("pointermove", (event) => {
+  if (!profileCropState || !profileCropStage.hasPointerCapture(event.pointerId)) return;
+  profileCropState.x = profileCropState.startX + event.clientX - profileCropState.pointerX;
+  profileCropState.y = profileCropState.startY + event.clientY - profileCropState.pointerY;
+  renderProfileCrop();
+});
+profileCropZoom.addEventListener("input", () => {
+  if (!profileCropState) return;
+  const stageSize = profileCropStage.clientWidth;
+  const oldScale = profileCropState.baseScale * profileCropState.zoom;
+  const sourceCenterX = (stageSize / 2 - profileCropState.x) / oldScale;
+  const sourceCenterY = (stageSize / 2 - profileCropState.y) / oldScale;
+  profileCropState.zoom = Number(profileCropZoom.value);
+  const nextScale = profileCropState.baseScale * profileCropState.zoom;
+  profileCropState.x = stageSize / 2 - sourceCenterX * nextScale;
+  profileCropState.y = stageSize / 2 - sourceCenterY * nextScale;
+  renderProfileCrop();
+});
+
+document.querySelector("[data-save-profile-photo]").addEventListener("click", async () => {
+  if (!profileCropState) return;
+  const button = document.querySelector("[data-save-profile-photo]");
+  button.disabled = true;
+  profileCropStatus.textContent = "Saving…";
+  profileCropStatus.classList.remove("is-error");
+  try {
+    const stageSize = profileCropStage.clientWidth;
+    const scale = profileCropState.baseScale * profileCropState.zoom;
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    canvas.getContext("2d").drawImage(
+      profileCropImage,
+      -profileCropState.x / scale,
+      -profileCropState.y / scale,
+      stageSize / scale,
+      stageSize / scale,
+      0,
+      0,
+      512,
+      512
+    );
+    const result = await api("/api/profile/photo", {
+      method: "POST",
+      body: JSON.stringify({ image: canvas.toDataURL("image/jpeg", 0.88) })
+    });
+    lifeProfile = { ...lifeProfile, ...result.profile, hasPhoto: true };
+    renderLifeProfile();
+    profileCropDialog.close();
+  } catch {
+    profileCropStatus.textContent = "The photo could not be saved. Try a different crop.";
+    profileCropStatus.classList.add("is-error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
 window.addEventListener("hashchange", () => {
   showPage(pageFromHash());
 });
@@ -5419,6 +5941,12 @@ window.addEventListener("resize", () => {
 
 const initialPage = pageFromHash();
 showPage(initialPage);
+createProfileSocialEditor();
+loadLifeProfile().then((profile) => {
+  if (!location.hash && profile.preferences.defaultPage !== "finance") {
+    location.hash = `#${profile.preferences.defaultPage}`;
+  }
+}).catch(() => renderLifeProfile());
 renderCurrent({
   syncPlaid: initialPage === "finance",
   refreshPlaidAccounts: true,

@@ -51,11 +51,11 @@ final class LifePortalLauncher: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             let image = NSImage(
                 systemSymbolName: "square.grid.2x2.fill",
-                accessibilityDescription: "Life Portal"
+                accessibilityDescription: "Lifepane"
             )
             image?.isTemplate = true
             button.image = image
-            button.toolTip = "Life Portal"
+            button.toolTip = "Lifepane"
         }
 
         let menu = NSMenu()
@@ -66,7 +66,7 @@ final class LifePortalLauncher: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         primaryMenuItem = NSMenuItem(
-            title: "Open Life Portal",
+            title: "Open Lifepane",
             action: #selector(handlePrimaryAction),
             keyEquivalent: "o"
         )
@@ -170,7 +170,7 @@ final class LifePortalLauncher: NSObject, NSApplicationDelegate {
                     self.showRunningState()
                     self.openPortal()
                 } else {
-                    self.writeLog("No existing Life Portal server found")
+                    self.writeLog("No existing Lifepane server found")
                     self.startServer()
                 }
             }
@@ -234,7 +234,7 @@ final class LifePortalLauncher: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        let url = resourcesURL.appendingPathComponent("LifePortal", isDirectory: true)
+        let url = resourcesURL.appendingPathComponent("Lifepane", isDirectory: true)
         return FileManager.default.fileExists(
             atPath: url.appendingPathComponent("server.js").path
         ) ? url : nil
@@ -242,7 +242,7 @@ final class LifePortalLauncher: NSObject, NSApplicationDelegate {
 
     private func applicationSupportURL() -> URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Life Portal", isDirectory: true)
+            .appendingPathComponent("Library/Application Support/Lifepane", isDirectory: true)
     }
 
     private func findNodePath() -> String {
@@ -258,14 +258,14 @@ final class LifePortalLauncher: NSObject, NSApplicationDelegate {
 
     private func showStartingState() {
         statusMenuItem.title = "Server Starting…"
-        primaryMenuItem.title = "Open Life Portal"
+        primaryMenuItem.title = "Open Lifepane"
         primaryMenuItem.isEnabled = false
         stopMenuItem.title = "Stop Server & Quit"
     }
 
     private func showRunningState() {
         statusMenuItem.title = "Server Running"
-        primaryMenuItem.title = "Open Life Portal"
+        primaryMenuItem.title = "Open Lifepane"
         primaryMenuItem.isEnabled = true
         stopMenuItem.title = "Stop Server & Quit"
     }
